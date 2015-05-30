@@ -16,7 +16,8 @@ scalacOptions in ThisBuild ++= Seq(
 )
 
 libraryDependencies in ThisBuild ++= Seq(
-  "org.scalaz"    %% "scalaz-core"  % "7.2.0-M1"
+  "org.scalaz"     %% "scalaz-core"  % "7.2.0-M1",
+  "org.scalacheck" %% "scalacheck"   % "1.12.3" % "test"
 )
 
 initialCommands in console := """
