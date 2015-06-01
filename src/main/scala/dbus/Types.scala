@@ -4,6 +4,7 @@ import scala.annotation.tailrec
 import scala.util.control.NonFatal
 import scala.collection.mutable.StringBuilder
 import scalaz._,Scalaz._
+import atto._,Atto._
 import DBus._
 
 trait Types {
@@ -38,6 +39,36 @@ trait Types {
       (types.foldLeft(new StringBuilder()){ (a, t) => a.append(t.code) }).toString
   }
 
+  trait ObjectPath {
+    val path: String
+
+    override def toString = path
+  }
+
+  trait InterfaceName {
+    val name: String
+
+    override def toString = name
+  }
+
+  trait MemberName {
+    val name: String
+
+    override def toString = name
+  }
+
+  trait ErrorName {
+    val name: String
+
+    override def toString = name
+  }
+
+  trait BusName {
+    val name: String
+
+    override def toString = name
+  }
+
   implicit class ListOps[T <: Type](val ts: List[T]) {
     def toSignature: Throwable \/ Signature =
       if(sumLength(ts) > 255) new Exception("Signature exceeds 255 bytes").left
@@ -47,13 +78,43 @@ trait Types {
     def toSignature_ : Signature = toSignature fold (throw _, identity)
   }
 
-  implicit class StringOps[T <: Type](val sig: String) {
+  implicit class StringOps(val s: String) {
     def toSignature: Throwable \/ Signature =
-      if(sig.length > 255) new Exception("Signature exceeds 255 bytes").left
-      else parseSignature(sig)
+      if(s.length > 255) (new Exception("Signature exceeds 255 bytes")).left
+      else parseSignature(s)
 
     def toSignatureO: Option[Signature] = toSignature.toOption
     def toSignature_ : Signature = toSignature fold (throw _, identity)
+
+    def toObjectPath: Throwable \/ ObjectPath =
+      if(isValidObjectPath(s)) (new ObjectPath { val path = s}).right
+      else (new Exception("Invalid ObjectPath string")).left
+    def toObjectPathO: Option[ObjectPath] = toObjectPath.toOption
+    def toObjectPath_ : ObjectPath = toObjectPath fold (throw _, identity)
+
+    def toInterfaceName: Throwable \/ InterfaceName =
+      if(isValidInterfaceName(s)) (new InterfaceName { val name = s}).right
+      else (new Exception("Invalid InterfaceName string")).left
+    def toInterfaceNameO: Option[InterfaceName] = toInterfaceName.toOption
+    def toInterfaceName_ : InterfaceName = toInterfaceName fold (throw _, identity)
+
+    def toMemberName: Throwable \/ MemberName =
+      if(isValidMemberName(s)) (new MemberName { val name = s}).right
+      else (new Exception("Invalid MemberName string")).left
+    def toMemberNameO: Option[MemberName] = toMemberName.toOption
+    def toMemberName_ : MemberName = toMemberName fold (throw _, identity)
+
+    def toErrorName: Throwable \/ ErrorName =
+      if(isValidErrorName(s)) (new ErrorName { val name = s}).right
+      else (new Exception("Invalid ErrorName string")).left
+    def toErrorNameO: Option[ErrorName] = toErrorName.toOption
+    def toErrorName_ : ErrorName = toErrorName fold (throw _, identity)
+
+    def toBusName: Throwable \/ BusName =
+      if(isValidBusName(s)) (new BusName { val name = s}).right
+      else (new Exception("Invalid BusName string")).left
+    def toBusNameO: Option[BusName] = toBusName.toOption
+    def toBusName_ : BusName = toBusName fold (throw _, identity)
   }
 
   def typeLength[T <: Type](t: T): Int =
@@ -174,9 +235,42 @@ trait Types {
       case 's' => TypeString
       case 'g' => TypeSignature
       case 'o' => TypeObjectPath
+      case 'v' => throw new Exception("Encountered 'v' in atomic position")
       case '{' => throw new Exception("'{' encountered outside of an array")
       case _   => throw new Exception(f"Unknown type code '$c%c'")
     }
 
+  val au = (('a' to 'z') ++ ('A' to 'Z') ++ List('_')).toSet
+  val anu = (('a' to 'z') ++ ('A' to 'Z') ++ ('0' to '9') ++ List('_')).toSet
+  val aud = (('a' to 'z') ++ ('A' to 'Z') ++ List('_', '-')).toSet
+  val anud = (('a' to 'z') ++ ('A' to 'Z') ++ ('0' to '9') ++ List('_', '-')).toSet
 
+  val alphaUnderscore = elem(au.contains(_))
+  val alphaNumUnderscore = elem(anu.contains(_))
+  val alphaUnderscoreDash = elem(aud.contains(_))
+  val alphaNumUnderscoreDash = elem(anud.contains(_))
+
+  val dot = Atto.char('.')
+  val colon = Atto.char(':')
+  val slash = Atto.char('/')
+
+  val objectPathElement = stringOf1(alphaNumUnderscore)
+  val objectPath = slash ~ sepBy(objectPathElement, slash) ~ endOfInput
+  def isValidObjectPath(s: String): Boolean = objectPath.parseOnly(s).option.isDefined
+
+  val interfaceNameElement = alphaUnderscore ~ many(alphaNumUnderscore)
+  val interfaceName = interfaceNameElement ~ dot ~ sepBy1(interfaceNameElement, dot) ~ endOfInput
+  def isValidInterfaceName(s: String): Boolean = interfaceName.parseOnly(s).option.isDefined
+
+  val memberName = alphaUnderscore ~ many(alphaNumUnderscore) ~ endOfInput
+  def isValidMemberName(s: String): Boolean = memberName.parseOnly(s).option.isDefined
+
+  def isValidErrorName(s: String): Boolean = isValidInterfaceName(s) // ErrorNames have the name format as InterfaceNames
+
+  val busNameUniqueElement = many1(alphaNumUnderscoreDash)
+  val busNameUnique = colon ~ busNameUniqueElement ~ dot ~ sepBy1(busNameUniqueElement, dot) ~ endOfInput
+  val busNameWellKnownElement = alphaUnderscoreDash ~ many(alphaNumUnderscoreDash)
+  val busNameWellKnown = busNameWellKnownElement ~ dot ~ sepBy1(busNameWellKnownElement, dot) ~ endOfInput
+  val busName = busNameUnique || busNameWellKnown
+  def isValidBusName(s: String): Boolean = busName.parseOnly(s).option.isDefined
 }

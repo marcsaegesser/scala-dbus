@@ -15,9 +15,13 @@ scalacOptions in ThisBuild ++= Seq(
   "-language:implicitConversions"
 )
 
+resolvers += "tpolecat"  at "http://dl.bintray.com/tpolecat/maven"
+
 libraryDependencies in ThisBuild ++= Seq(
-  "org.scalaz"     %% "scalaz-core"  % "7.2.0-M1",
-  "org.scalacheck" %% "scalacheck"   % "1.12.3" % "test"
+  "org.scalaz"     %% "scalaz-core"    % "7.1.2",
+  "org.tpolecat"   %% "atto-core"      % "0.4.1",
+  "org.scalatest"  %  "scalatest_2.11" % "2.2.4" % "test",
+  "org.scalacheck" %% "scalacheck"     % "1.12.3" % "test"
 )
 
 initialCommands in console := """
