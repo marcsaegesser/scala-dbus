@@ -11,74 +11,61 @@ trait Types {
   sealed trait Type { val code: String; val align: Int }
   sealed trait AtomicType extends Type
 
-  // Atomic Types
-  case object TypeBoolean    extends AtomicType { val code = "b"; val align = 4 }
-  case object TypeWord8      extends AtomicType { val code = "y"; val align = 1 }
-  case object TypeWord16     extends AtomicType { val code = "q"; val align = 2 }
-  case object TypeWord32     extends AtomicType { val code = "u"; val align = 4 }
-  case object TypeWord64     extends AtomicType { val code = "t"; val align = 8 }
-  case object TypeInt16      extends AtomicType { val code = "n"; val align = 2 }
-  case object TypeInt32      extends AtomicType { val code = "i"; val align = 4 }
-  case object TypeInt64      extends AtomicType { val code = "x"; val align = 8 }
-  case object TypeDouble     extends AtomicType { val code = "d"; val align = 8 }
-  case object TypeUnixFD     extends AtomicType { val code = "h"; val align = 4 }
-  case object TypeString     extends AtomicType { val code = "s"; val align = 4 }
-  case object TypeSignature  extends AtomicType { val code = "g"; val align = 4 }
-  case object TypeObjectPath extends AtomicType { val code = "o"; val align = 4 }
-  // Container Types
+  case object TypeBoolean       extends AtomicType { val code = "b"; val align = 4 }
+  case object TypeWord8         extends AtomicType { val code = "y"; val align = 1 }
+  case object TypeWord16        extends AtomicType { val code = "q"; val align = 2 }
+  case object TypeWord32        extends AtomicType { val code = "u"; val align = 4 }
+  case object TypeWord64        extends AtomicType { val code = "t"; val align = 8 }
+  case object TypeInt16         extends AtomicType { val code = "n"; val align = 2 }
+  case object TypeInt32         extends AtomicType { val code = "i"; val align = 4 }
+  case object TypeInt64         extends AtomicType { val code = "x"; val align = 8 }
+  case object TypeDouble        extends AtomicType { val code = "d"; val align = 8 }
+  case object TypeUnixFD        extends AtomicType { val code = "h"; val align = 4 }
+  case object TypeString        extends AtomicType { val code = "s"; val align = 4 }
+  case object TypeSignature     extends AtomicType { val code = "g"; val align = 1 }
+  case object TypeObjectPath    extends AtomicType { val code = "o"; val align = 4 }
   case object TypeVariant       extends Type { val code = "v"; val align = 1 }
   case class TypeArray(t: Type) extends Type { val code = s"a${t.code}"; val align = 4 }
   case class TypeDictionary(k: AtomicType, v: Type) extends Type { val code = s"a{${k.code}${v.code}}"; val align = 8 }
   case class TypeStructure(ts: List[Type]) extends Type { val code = ts map (_.code) mkString ("(", "", ")"); val align = 8 }
 
   /* Represents a *valid* D-Bus type signature */
-  trait Signature {
-    val types: List[Type]
+  case class Signature(types: List[Type]) {
+    if(sumLength(types) > 255) new Exception("Signature exceeds 255 bytes")
 
     override def toString() =
       (types.foldLeft(new StringBuilder()){ (a, t) => a.append(t.code) }).toString
   }
 
-  sealed trait ObjectPath {
-    val path: String
-
-    override def toString = path
+  case class ObjectPath(path: String) {
+    if(!isValidObjectPath(path)) throw new Exception(s"Invalid object path string $path")
   }
 
-  sealed trait InterfaceName {
-    val name: String
-
-    override def toString = name
+  case class InterfaceName(name: String) {
+    if(!isValidInterfaceName(name)) throw new Exception(s"Invalid interface name string $name")
   }
 
-  sealed trait MemberName {
-    val name: String
-
-    override def toString = name
+  case class MemberName(name: String) {
+    if(!isValidMemberName(name)) throw new Exception(s"Invalid member name string $name")
   }
 
-  sealed trait ErrorName {
-    val name: String
-
-    override def toString = name
+  case class ErrorName(name: String) {
+    if(!isValidErrorName(name)) throw new Exception(s"Invalid error nam string $name")
   }
 
-  sealed trait BusName {
-    val name: String
-
-    override def toString = name
+  case class BusName(name: String) {
+    if(!isValidBusName(name)) throw new Exception(s"Invalid bus nam string $name")
   }
 
-  implicit class ListOps[T <: Type](val ts: List[T]) {
+  implicit class SignatureListOps[T <: Type](val ts: List[T]) {
     def toSignature: Throwable \/ Signature =
-      if(sumLength(ts) > 255) new Exception("Signature exceeds 255 bytes").left
-      else (new Signature{ val types = ts }).right
+      \/.fromTryCatchNonFatal(Signature(ts))
 
     def toSignatureO: Option[Signature] = toSignature.toOption
     def toSignature_ : Signature = toSignature fold (throw _, identity)
   }
 
-  implicit class StringOps(val s: String) {
+  implicit class SignatureStringOps(val s: String) {
     def toSignature: Throwable \/ Signature =
       if(s.length > 255) (new Exception("Signature exceeds 255 bytes")).left
       else parseSignature(s)
@@ -87,32 +74,27 @@ trait Types {
     def toSignature_ : Signature = toSignature fold (throw _, identity)
 
     def toObjectPath: Throwable \/ ObjectPath =
-      if(isValidObjectPath(s)) (new ObjectPath { val path = s}).right
-      else (new Exception("Invalid ObjectPath string")).left
+      \/.fromTryCatchNonFatal(ObjectPath(s))
     def toObjectPathO: Option[ObjectPath] = toObjectPath.toOption
     def toObjectPath_ : ObjectPath = toObjectPath fold (throw _, identity)
 
     def toInterfaceName: Throwable \/ InterfaceName =
-      if(isValidInterfaceName(s)) (new InterfaceName { val name = s}).right
-      else (new Exception("Invalid InterfaceName string")).left
+      \/.fromTryCatchNonFatal(InterfaceName(s))
     def toInterfaceNameO: Option[InterfaceName] = toInterfaceName.toOption
     def toInterfaceName_ : InterfaceName = toInterfaceName fold (throw _, identity)
 
     def toMemberName: Throwable \/ MemberName =
-      if(isValidMemberName(s)) (new MemberName { val name = s}).right
-      else (new Exception("Invalid MemberName string")).left
+      \/.fromTryCatchNonFatal(MemberName(s))
     def toMemberNameO: Option[MemberName] = toMemberName.toOption
     def toMemberName_ : MemberName = toMemberName fold (throw _, identity)
 
     def toErrorName: Throwable \/ ErrorName =
-      if(isValidErrorName(s)) (new ErrorName { val name = s}).right
-      else (new Exception("Invalid ErrorName string")).left
+      \/.fromTryCatchNonFatal(ErrorName(s))
     def toErrorNameO: Option[ErrorName] = toErrorName.toOption
     def toErrorName_ : ErrorName = toErrorName fold (throw _, identity)
 
     def toBusName: Throwable \/ BusName =
-      if(isValidBusName(s)) (new BusName { val name = s}).right
-      else (new Exception("Invalid BusName string")).left
+      \/.fromTryCatchNonFatal(BusName(s))
     def toBusNameO: Option[BusName] = toBusName.toOption
     def toBusName_ : BusName = toBusName fold (throw _, identity)
   }
