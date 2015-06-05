@@ -39,31 +39,31 @@ trait Types {
       (types.foldLeft(new StringBuilder()){ (a, t) => a.append(t.code) }).toString
   }
 
-  trait ObjectPath {
+  sealed trait ObjectPath {
     val path: String
 
     override def toString = path
   }
 
-  trait InterfaceName {
+  sealed trait InterfaceName {
     val name: String
 
     override def toString = name
   }
 
-  trait MemberName {
+  sealed trait MemberName {
     val name: String
 
     override def toString = name
   }
 
-  trait ErrorName {
+  sealed trait ErrorName {
     val name: String
 
     override def toString = name
   }
 
-  trait BusName {
+  sealed trait BusName {
     val name: String
 
     override def toString = name
