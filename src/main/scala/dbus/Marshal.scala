@@ -346,7 +346,7 @@ trait Marshal {
     def readType: State[UnmarshalState, Type] =
       for {
         s <- decodeField(TypeSignature, e)
-      } yield (s.asInstanceOf[FieldSignature]).v.types.head
+      } yield (s.asSignature.types.head)
 
     for {
       t <- readType
