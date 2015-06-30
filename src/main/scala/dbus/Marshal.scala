@@ -1,5 +1,6 @@
 package dbus
 
+import scala.util.control.NonFatal
 import java.nio.charset.Charset
 import scalaz._,Scalaz._
 import scodec._
@@ -125,8 +126,15 @@ trait Marshal {
   private def marshaler(m: Message, e: ByteOrdering): State[BitVector, Unit] =
     (m traverseS_ (marshalField(_, e)))
 
-  def marshal(m: Message, e: ByteOrdering = ByteOrdering.BigEndian) =
-    marshaler(m, e) exec (BitVector.empty)
+  def marshal(m: Message, e: ByteOrdering = ByteOrdering.BigEndian): Throwable \/ BitVector =
+    try {
+      (marshaler(m, e) exec (BitVector.empty)).right
+    } catch {
+      case NonFatal(t: Throwable) => t.left
+    }
+
+  def marshal_(m: Message, e: ByteOrdering = ByteOrdering.BigEndian): BitVector =
+    marshal(m, e) fold (throw _, identity)
 
   import DBusCodecs._
 
@@ -173,7 +181,7 @@ trait Marshal {
       }
 
   def encodeArray(t: Type, v: Vector[Field], e: ByteOrdering): State[BitVector, Unit] = {
-    val arrayBits = marshal(v, e)
+    val arrayBits = marshal(v, e) getOrElse { throw new Exception("Error encoding array bits") }
     val size = arrayBits.size / 8
     if (size > 67108864) throw new Exception(s"Array size of $size bytes to large")
     for {
@@ -240,10 +248,18 @@ trait Marshal {
   def unmarshaler(ts: List[Type], e: ByteOrdering): State[UnmarshalState, Unit] =
     ts traverseS_ (unmarshalField(_, e))
 
-  def unmarshal(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Message =
-    unmarshaler(s.types, e)
-      .exec (UnmarshalState.empty(bits))
-      .map (_.m)
+  def unmarshal(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Throwable \/ Message =
+    try {
+      unmarshaler(s.types, e)
+        .exec (UnmarshalState.empty(bits))
+        .map (_.m)
+        .right
+    } catch {
+      case NonFatal(t: Throwable) => t.left
+    }
+
+  def unmarshal_(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Message =
+    unmarshal(s, bits, e) fold (throw _, identity)
 
   def decodeField(t: Type, e: ByteOrdering): State[UnmarshalState, Field] = {
     def updateUnmarshalState(f: BitVector => DecodeResult[Field]): State[UnmarshalState, Field] = {

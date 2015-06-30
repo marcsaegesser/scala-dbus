@@ -56,7 +56,7 @@ object DBusMarshalSpecification extends Properties("Marshal") {
 
   property("roundTrip") = forAll { m: Message =>
     val s = messageSignature_(m)
-    unmarshal(s, marshal(m)) == m
+    unmarshal_(s, marshal_(m)) == m
   }
 }
 

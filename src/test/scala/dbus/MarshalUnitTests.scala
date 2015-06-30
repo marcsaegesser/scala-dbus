@@ -7,12 +7,12 @@ class MarshalUnitTests extends WordSpec with ShouldMatchers {
   import DBus._
 
   def roundTrip(m: Message) = {
-    val bits = marshal(m)
+    val bits = marshal_(m)
     val s = messageSignature(m).getOrElse(throw new Exception("Invalid signature"))
-    unmarshal(s, bits) should equal(m)
-    val bitsL = marshal(m, ByteOrdering.LittleEndian)
+    unmarshal_(s, bits) should equal(m)
+    val bitsL = marshal_(m, ByteOrdering.LittleEndian)
     val sL = messageSignature(m).getOrElse(throw new Exception("Invalid signature"))
-    unmarshal(sL, bitsL, ByteOrdering.LittleEndian) should equal(m)
+    unmarshal_(sL, bitsL, ByteOrdering.LittleEndian) should equal(m)
   }
 
   "DBus" should {
