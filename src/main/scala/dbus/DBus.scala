@@ -1,6 +1,8 @@
 package dbus
 
 trait DBus
-    extends dbus.Types with dbus.Marshal
+    extends dbus.Types
+    with dbus.Fields
+    with dbus.Marshal
 
 object DBus extends DBus

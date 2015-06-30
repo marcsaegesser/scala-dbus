@@ -256,3 +256,5 @@ trait Types {
   val busName = busNameUnique || busNameWellKnown
   def isValidBusName(s: String): Boolean = busName.parseOnly(s).option.isDefined
 }
+
+object Types extends Types
