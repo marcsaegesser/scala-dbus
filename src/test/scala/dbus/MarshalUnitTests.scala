@@ -1,12 +1,13 @@
 package dbus
 
+import scalaz._,Scalaz._
 import scodec.bits.{ ByteOrdering }
 import org.scalatest._
 
 class MarshalUnitTests extends WordSpec with ShouldMatchers {
   import DBus._
 
-  def roundTrip(m: Message) = {
+  def roundTrip(m: Vector[Field]) = {
     val bits = marshal_(m)
     val s = messageSignature(m).getOrElse(throw new Exception("Invalid signature"))
     unmarshal_(s, bits) should equal(m)

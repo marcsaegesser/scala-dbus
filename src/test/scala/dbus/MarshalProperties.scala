@@ -1,5 +1,6 @@
 package dbus
 
+import scalaz._,Scalaz._
 import org.scalacheck._
 import org.scalacheck.Prop.forAll
 import dbus._
@@ -51,10 +52,10 @@ object DBusMarshalSpecification extends Properties("Marshal") {
   def genVariant: Gen[FieldVariant] = lzy(genField map (FieldVariant.apply))
   def genStructure: Gen[FieldStructure] = lzy(genMessage map (m => FieldStructure(messageSignature_(m), m)))
 
-  def genMessage: Gen[Message] = lzy(nonEmptyContainerOf[Vector, Field](genField) suchThat(m => messageSignature_(m).toString.length <= 255))
+  def genMessage: Gen[Vector[Field]] = lzy(nonEmptyContainerOf[Vector, Field](genField) suchThat(m => messageSignature_(m).toString.length <= 255))
   implicit lazy val arbMessage = Arbitrary(genMessage)
 
-  property("roundTrip") = forAll { m: Message =>
+  property("roundTrip") = forAll { m: Vector[Field] =>
     val s = messageSignature_(m)
     unmarshal_(s, marshal_(m)) == m
   }

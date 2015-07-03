@@ -101,11 +101,9 @@ trait Fields {
 
   case class FieldDictionary(t: TypeDictionary, v: Vector[(Field, Field)]) extends Field
 
-  type Message = Vector[Field]
+  // type Message = Vector[Field]
 
-  implicit class FieldListOps[F <: Field](val fs: List[F]) {
-    def toMessage: Message = fs.toVector
+  implicit class FieldSeqOps[F <: Field](val fs: Seq[F]) {
+    def toFields: Vector[Field] = fs.toVector
   }
 }
-
-object Fields extends Fields

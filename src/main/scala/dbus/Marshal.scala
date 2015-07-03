@@ -1,5 +1,6 @@
 package dbus
 
+import scala.language.higherKinds
 import scala.util.control.NonFatal
 import java.nio.charset.Charset
 import scalaz._,Scalaz._
@@ -10,8 +11,8 @@ import scodec.bits.{ ByteVector, BitVector, ByteOrdering }
 import DBus._
 
 trait Marshal {
-  def messageSignature(m: Message): Throwable \/ Signature = (m.map(_.t)).toList.toSignature
-  def messageSignature_(m: Message): Signature = (m.map(_.t)).toList.toSignature_
+  def messageSignature(m: Seq[Field]): Throwable \/ Signature = (m.map(_.t)).toList.toSignature
+  def messageSignature_(m: Seq[Field]): Signature = (m.map(_.t)).toList.toSignature_
 
   def marshalField(f: Field, e: ByteOrdering): State[BitVector, Unit] =
     for {
@@ -19,13 +20,13 @@ trait Marshal {
       _ <- encodeField(f, e)
     } yield ()
 
-  private def marshaler(m: Message, e: ByteOrdering): State[BitVector, Unit] =
+  private def marshaler[F[_]: Foldable](m: F[Field], e: ByteOrdering): State[BitVector, Unit] =
     (m traverseS_ (marshalField(_, e)))
 
-  def marshal(m: Message, e: ByteOrdering = ByteOrdering.BigEndian): Throwable \/ BitVector =
+  def marshal[F[_]: Foldable](m: F[Field], e: ByteOrdering = ByteOrdering.BigEndian): Throwable \/ BitVector =
     \/.fromTryCatchNonFatal { (marshaler(m, e) exec (BitVector.empty)) }
 
-  def marshal_(m: Message, e: ByteOrdering = ByteOrdering.BigEndian): BitVector =
+  def marshal_[F[_]: Foldable](m: F[Field], e: ByteOrdering = ByteOrdering.BigEndian): BitVector =
     marshal(m, e) fold (throw _, identity)
 
   import DBusCodecs._
@@ -112,7 +113,7 @@ trait Marshal {
       _ <- put(v ++ b)
     } yield ()
 
-  case class UnmarshalState(bits: BitVector, offset: Int, m: Message)
+  case class UnmarshalState(bits: BitVector, offset: Int, m: Vector[Field])
   object UnmarshalState {
     def empty(bits: BitVector) = UnmarshalState(bits, 0, Vector.empty[Field])
   }
@@ -136,7 +137,7 @@ trait Marshal {
   def unmarshaler(ts: List[Type], e: ByteOrdering): State[UnmarshalState, Unit] =
     ts traverseS_ (unmarshalField(_, e))
 
-  def unmarshal(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Throwable \/ Message =
+  def unmarshal(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Throwable \/ Vector[Field] =
     try {
       unmarshaler(s.types, e)
         .exec (UnmarshalState.empty(bits))
@@ -146,7 +147,7 @@ trait Marshal {
       case NonFatal(t: Throwable) => t.left
     }
 
-  def unmarshal_(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Message =
+  def unmarshal_(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Vector[Field] =
     unmarshal(s, bits, e) fold (throw _, identity)
 
   def decodeField(t: Type, e: ByteOrdering): State[UnmarshalState, Field] = {
