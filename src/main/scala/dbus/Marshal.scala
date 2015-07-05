@@ -134,21 +134,35 @@ trait Marshal {
       _ <- modify[UnmarshalState](_.copy(m = s.m :+ f))
     } yield ()
 
-  def unmarshaler(ts: List[Type], e: ByteOrdering): State[UnmarshalState, Unit] =
-    ts traverseS_ (unmarshalField(_, e))
+  def unmarshaler(s: List[Type], e: ByteOrdering): State[UnmarshalState, Unit] =
+    s traverseS_ (unmarshalField(_, e))
 
   def unmarshal(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Throwable \/ Vector[Field] =
-    try {
+    \/.fromTryCatchNonFatal {
       unmarshaler(s.types, e)
         .exec (UnmarshalState.empty(bits))
         .map (_.m)
-        .right
-    } catch {
-      case NonFatal(t: Throwable) => t.left
     }
 
   def unmarshal_(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Vector[Field] =
     unmarshal(s, bits, e) fold (throw _, identity)
+
+  def unmarshalerMany(ss: List[List[Type]], e: ByteOrdering): State[UnmarshalState, List[Vector[Field]]] = ???
+
+  def unmarshalMany(ss: List[Signature], bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): List[Vector[Field]] = ???
+
+  // def unmarshalerHeaderBody(hs: Signature, s: Signature, e: ByteOrdering = ByteOrdering.BigEndian): State[UnmarshalState, (Vector[Field], Vector[Field])] =
+  //   for {
+  //     _ <- unmarshaler(hs.types, e)
+  //     h <- get[UnmarshalState]
+  //     _ <- skipPad(8)
+  //     _ <- unmarshaler(s.types, e)
+  //     b <- get[UnmarshalState]
+  //   } yield (h.m, b.m)
+
+  // def unmarshalHeaderBody(hs: Signature, s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): (Vector[Field], Vector[Field]) =
+  //   unmarshalerHeaderBody(hs, s, e)
+  //     .eval(UnmarshalState.empty(bits))
 
   def decodeField(t: Type, e: ByteOrdering): State[UnmarshalState, Field] = {
     def updateUnmarshalState(f: BitVector => DecodeResult[Field]): State[UnmarshalState, Field] = {
