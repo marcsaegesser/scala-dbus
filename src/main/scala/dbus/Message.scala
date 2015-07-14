@@ -19,7 +19,7 @@ trait Message {
   case object NoAutoStart          extends MessageFlag { val flag = 0x02.toByte }
   case object AllowInteractiveAuth extends MessageFlag { val flag = 0x04.toByte }
 
-  sealed trait MessageHeader {
+  sealed trait MessageHeader extends Product with Serializable {
     val code: Byte
     val f: Field
     val toField = new FieldStructure("yv".toSignature_, Vector(code.toField, f))
@@ -31,7 +31,7 @@ trait Message {
   case class HeaderReplySerial(error: Int)             extends MessageHeader { val code: Byte = 5; val f: Field = error}
   case class HeaderDestination(destination: BusName)   extends MessageHeader { val code: Byte = 6; val f: Field = destination.toString}
   case class HeaderSender(sender: BusName)             extends MessageHeader { val code: Byte = 7; val f: Field = sender.toString}
-  case class HeaderSignature(signature: String)        extends MessageHeader { val code: Byte = 8; val f: Field = signature}
+  case class HeaderSignature(signature: Signature)     extends MessageHeader { val code: Byte = 8; val f: Field = signature.toString}
   case class HeaderUnixFDs(numFDs: Int)                extends MessageHeader { val code: Byte = 9; val f: Field = numFDs}
 
 
@@ -49,7 +49,7 @@ trait Message {
   ) extends DBusMessage {
     val msgType = MethodCallType
     val flags = List(if(replyExpected) none else NoReplyExpected.some, if(autoStart) none else NoAutoStart.some) filter (_.isDefined) map (_.get)
-    val headers = List(HeaderPath(path).some, HeaderMember(member).some, interface map (HeaderInterface(_)), sender map (HeaderSender(_)), destination map (HeaderDestination(_))) filter (_.isDefined) map (_.get)
+    val headers = List(HeaderPath(path).some, HeaderMember(member).some, messageSignature(body).toOption map (HeaderSignature(_)), interface map (HeaderInterface(_)), sender map (HeaderSender(_)), destination map (HeaderDestination(_))) filter (_.isDefined) map (_.get)
   }
 
   case class MethodReturn(
