@@ -23,6 +23,6 @@
   <logger name="scala.slick" level="warn" />
 
   <root level="trace">
-	<appender-ref ref="console"/>
+	<appender-ref ref="rolling-file"/>
   </root>
 </configuration>

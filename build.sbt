@@ -26,6 +26,7 @@ libraryDependencies in ThisBuild ++= Seq(
   "org.typelevel"              %% "scodec-bits"   % "1.1.0-SNAPSHOT",
   "org.scodec"                 %% "scodec-core"   % "1.8.0",
   "org.scalaz.stream"          %% "scalaz-stream" % "0.7a",
+  "org.scala-stm"              %% "scala-stm"     % "0.7",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
   "org.slf4j"                  %  "slf4j-api"     % "1.7.7",
   "ch.qos.logback"             %  "logback-classic" % "1.1.3",

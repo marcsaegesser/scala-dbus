@@ -26,35 +26,35 @@ trait Types {
   case object TypeObjectPath    extends AtomicType { val code = "o"; val align = 4 }
   case object TypeVariant       extends Type { val code = "v"; val align = 1 }
   case class TypeArray(t: Type) extends Type { val code = s"a${t.code}"; val align = 4 }
-  case class TypeDictionary(k: AtomicType, v: Type) extends Type { val code = s"a{${k.code}${v.code}}"; val align = 8 }
+  case class TypeDictionary(k: AtomicType, v: Type) extends Type { val code = s"a{${k.code}${v.code}}"; val align = 4 }
   case class TypeStructure(ts: List[Type]) extends Type { val code = ts map (_.code) mkString ("(", "", ")"); val align = 8 }
 
   /* Represents a *valid* D-Bus type signature */
   case class Signature(types: List[Type]) {
-    if(sumLength(types) > 255) new Exception("Signature exceeds 255 bytes")
+    require(sumLength(types) <= 255, "Signature exceeds 255 bytes")
 
     override def toString() =
       (types.foldLeft(new StringBuilder()){ (a, t) => a.append(t.code) }).toString
   }
 
   case class ObjectPath(path: String) {
-    if(!isValidObjectPath(path)) throw new Exception(s"Invalid object path string $path")
+    require(isValidObjectPath(path), s"Invalid object path string $path")
   }
 
   case class InterfaceName(name: String) {
-    if(!isValidInterfaceName(name)) throw new Exception(s"Invalid interface name string $name")
+    require(isValidInterfaceName(name), s"Invalid interface name string $name")
   }
 
   case class MemberName(name: String) {
-    if(!isValidMemberName(name)) throw new Exception(s"Invalid member name string $name")
+    require(isValidMemberName(name), s"Invalid member name string $name")
   }
 
   case class ErrorName(name: String) {
-    if(!isValidErrorName(name)) throw new Exception(s"Invalid error nam string $name")
+    require(isValidErrorName(name), s"Invalid error nam string $name")
   }
 
   case class BusName(name: String) {
-    if(!isValidBusName(name)) throw new Exception(s"Invalid bus nam string $name")
+    require(isValidBusName(name), s"Invalid bus nam string $name")
   }
 
   implicit class SignatureListOps[T <: Type](val ts: List[T]) {
@@ -98,6 +98,12 @@ trait Types {
     def toBusNameO: Option[BusName] = toBusName.toOption
     def toBusName_ : BusName = toBusName fold (throw _, identity)
   }
+
+  implicit def string2ObjectPath(s: String): ObjectPath = s.toObjectPath_
+  implicit def string2InterfaceName(s: String): InterfaceName = s.toInterfaceName_
+  implicit def string2MemberName(s: String): MemberName = s.toMemberName_
+  implicit def string2ErrorName(s: String): ErrorName = s.toErrorName_
+  implicit def string2BusName(s: String): BusName = s.toBusName_
 
   def typeLength[T <: Type](t: T): Int =
     t match {

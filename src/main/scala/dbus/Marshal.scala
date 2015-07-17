@@ -216,11 +216,11 @@ trait Marshal {
   }
 
   def decodeArray(t: Type, e: ByteOrdering): State[UnmarshalState, Field] = {
-    def atOffset(o: Long): State[UnmarshalState, Boolean] = State { s => (s, s.offset >= o)}
+    def beforeOffset(o: Long): State[UnmarshalState, Boolean] = State { s => (s, s.offset < o)}
     for {
       f <- decodeField(TypeInt32, e)
       s <- get[UnmarshalState]
-      v <- unmarshalField(t, e).untilM[Vector](atOffset( s.offset + f.asInt.toLong))
+      v <- unmarshalField(t, e).whileM[Vector](beforeOffset( s.offset + f.asInt.toLong))
     } yield FieldArray(t, v)
   }
 

@@ -30,6 +30,10 @@ class MarshalUnitTests extends WordSpec with ShouldMatchers {
       roundTrip(Vector(FieldArray(TypeArray(TypeInt32), Vector(FieldArray(TypeInt32, Vector(FieldInt32(1), FieldInt32(2), FieldInt32(3))),FieldArray(TypeInt32, Vector(FieldInt32(4), FieldInt32(5), FieldInt32(6)))))))
     }
 
+    "roundtrip empty arrays" in {
+      roundTrip(Vector(FieldArray(TypeArray(TypeString), Vector.empty[Field])))
+    }
+
     "roundtrip structure messages" in {
       roundTrip(Vector(FieldString("abcde"), FieldStructure("ais".toSignature_, Vector(FieldArray(TypeInt32, Vector(FieldInt32(100), FieldInt32(101), FieldInt32(102))), FieldString("fubar")))))
       roundTrip(Vector(FieldArray(TypeString, Vector(FieldString("asdf"), FieldString("fdsa"), FieldString("asdfasf"))), FieldStructure("ais".toSignature_, Vector(FieldArray(TypeInt32, Vector(FieldInt32(100), FieldInt32(101), FieldInt32(102))), FieldString("fubar")))))
@@ -43,6 +47,10 @@ class MarshalUnitTests extends WordSpec with ShouldMatchers {
 
     "roundtrip dictionary messages" in {
       roundTrip(Vector(FieldDictionary(TypeDictionary(TypeInt32, TypeString), Vector((FieldInt32(1), FieldString("1")), (FieldInt32(2), FieldString("2"))))))
+    }
+
+    "roundtrip emptry dictionaries" in {
+      roundTrip(Vector(FieldDictionary(TypeDictionary(TypeInt32, TypeString), Vector.empty)))
     }
   }
 }
