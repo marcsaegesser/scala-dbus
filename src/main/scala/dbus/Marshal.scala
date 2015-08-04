@@ -128,7 +128,6 @@ trait Marshal {
 
   def unmarshalField(t: Type, e: ByteOrdering): State[UnmarshalState, Field] =
     for {
-      s <- get[UnmarshalState]
       _ <- skipPad(t.align)
       f <- decodeField(t, e)
     } yield f
@@ -137,10 +136,7 @@ trait Marshal {
     s traverseS (unmarshalField(_, e))
 
   def unmarshal(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Throwable \/ Vector[Field] =
-    \/.fromTryCatchNonFatal {
-      unmarshaler(s.types.toVector, e)
-        .eval (UnmarshalState.empty(bits))
-    }
+    \/.fromTryCatchNonFatal { unmarshaler(s.types.toVector, e) eval (UnmarshalState.empty(bits)) }
 
   def unmarshal_(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Vector[Field] =
     unmarshal(s, bits, e) fold (throw _, identity)

@@ -50,11 +50,11 @@ trait Types {
   }
 
   case class ErrorName(name: String) {
-    require(isValidErrorName(name), s"Invalid error nam string $name")
+    require(isValidErrorName(name), s"Invalid error name string $name")
   }
 
   case class BusName(name: String) {
-    require(isValidBusName(name), s"Invalid bus nam string $name")
+    require(isValidBusName(name), s"Invalid bus name string $name")
   }
 
   implicit class SignatureListOps[T <: Type](val ts: List[T]) {

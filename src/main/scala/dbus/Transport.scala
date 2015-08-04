@@ -41,14 +41,14 @@ trait Transport extends StrictLogging {
     }
   }
 
-  def startReadLoop(cb: DBusMessage => Unit): Unit = {
+  def startReadLoop(cb: (Int, DBusMessage) => Unit): Unit = {
     val readerThread = new Thread {
       override def run() = {
         try {
           while(running()) {
             readMessage(in) match {
-              case \/-(m) => cb(m)
-              case -\/(t) => throw t
+              case  \/-((s, m)) => cb(s, m)
+              case -\/ (t) => throw t
             }
           }
         } catch {
@@ -117,11 +117,12 @@ object Transport extends StrictLogging {
 }
 
 object MessageReader extends StrictLogging {
-  def readMessage(in: InputStream): Throwable \/ DBusMessage =
+  def readMessage(in: InputStream): Throwable \/ (Int, DBusMessage) =
     for {
       hb <- readBytes(in, 16)
       fh <- DBusMessageCodec.decodeFixedHeader(BitVector(hb))
       bl = fh(4).asLong
+      s = fh(5).asInt
       hl = fh(6).asLong
       fhb <- readBytes(in, hb, hl + 16)
       h <- DBusMessageCodec.decodeHeader(BitVector(fhb))
@@ -129,7 +130,7 @@ object MessageReader extends StrictLogging {
       _ <- readBytes(in, p)
       bb <- readBytes(in, bl)
       b <- DBusMessageCodec.decodeMessage(h, BitVector(bb))
-    } yield b
+    } yield (s, b)
 
   case class ReaderState(buffer: Array[Byte], offset: Int, size: Long)
   object ReaderState {
@@ -145,28 +146,25 @@ object MessageReader extends StrictLogging {
     def empty(size: Long) = ReaderState(new Array[Byte](size.toInt), 0, size)
   }
 
-  def notAtOffset(o: Long): State[ReaderState, Boolean] = State { s => (s, s.offset < o) }
+  def beforeOffset(o: Long): State[ReaderState, Boolean] = State { s => (s, s.offset < o) }
 
   def reader(in: InputStream): State[ReaderState, Unit] =
     for {
       s <- get[ReaderState]
-      _ = logger.trace(s"reader:  offset=${s.offset}, toRead=${s.size - s.offset}")
       n = in.read(s.buffer, s.offset, (s.size - s.offset).toInt)
       _ = if(n < 0) throw new Exception("Unexpected EOF on input stream")
-      _ = logger.trace(s"reader:  read = $n")
       _ <- put[ReaderState](s.copy(offset = s.offset + n))
     } yield ()
 
   def readBytes(in: InputStream, length: Long): Throwable \/ Array[Byte] = {
     \/.fromTryCatchNonFatal {
-      logger.debug(s"readBytes:  IN - length=$length")
-      (reader(in) whileM_ (notAtOffset(length)) exec ReaderState.empty(length)).buffer
+      (reader(in) whileM_ (beforeOffset(length)) exec ReaderState.empty(length)).buffer
     }
   }
 
   def readBytes(in: InputStream, initial: Array[Byte], length: Long): Throwable \/ Array[Byte] = {
     \/.fromTryCatchNonFatal {
-      (reader(in) whileM_ (notAtOffset(length)) exec ReaderState(initial, length)).buffer
+      (reader(in) whileM_ (beforeOffset(length)) exec ReaderState(initial, length)).buffer
     }
   }
 

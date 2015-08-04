@@ -19,11 +19,10 @@ resolvers += "tpolecat"  at "http://dl.bintray.com/tpolecat/maven"
 resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"
 resolvers += "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases"
 
-
 libraryDependencies in ThisBuild ++= Seq(
   "org.scalaz"                 %% "scalaz-core"   % "7.1.2",
   "org.tpolecat"               %% "atto-core"     % "0.4.1",
-  "org.typelevel"              %% "scodec-bits"   % "1.1.0-SNAPSHOT",
+  "org.scodec"                 %% "scodec-bits"   % "1.0.9",
   "org.scodec"                 %% "scodec-core"   % "1.8.0",
   "org.scalaz.stream"          %% "scalaz-stream" % "0.7a",
   "org.scala-stm"              %% "scala-stm"     % "0.7",
@@ -33,11 +32,24 @@ libraryDependencies in ThisBuild ++= Seq(
   "org.scalatest"              %% "scalatest"     % "2.2.4"  % "test",
   "org.scalacheck"             %% "scalacheck"    % "1.12.3" % "test"
 )
-
 libraryDependencies ++= {
   if (scalaBinaryVersion.value startsWith "2.10")
     Seq(compilerPlugin("org.scalamacros" % "paradise" % "2.0.1" cross CrossVersion.full))
   else Nil
+}
+
+libraryDependencies := {
+  CrossVersion.partialVersion(scalaVersion.value) match {
+    // if scala 2.11+ is used, add dependency on scala-xml module
+    case Some((2, scalaMajor)) if scalaMajor >= 11 =>
+      libraryDependencies.value ++ Seq(
+        "org.scala-lang.modules" %% "scala-xml" % "1.0.5",
+        "org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.4"
+      )
+    case _ =>
+      // or just libraryDependencies.value if you don't depend on scala-swing
+      libraryDependencies.value
+  }
 }
 
 unmanagedJars in Compile <++= baseDirectory map { base =>

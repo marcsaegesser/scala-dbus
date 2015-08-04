@@ -38,14 +38,50 @@ case class SignalMatchSpec(
     ).reduce( _ && _ )
 }
 
+
+
+import BitFields._
+
+sealed trait RequestNameFlag extends BitField
+case object AllowReplacement extends RequestNameFlag { val code = 0x01 }
+case object ReplaceExisting  extends RequestNameFlag { val code = 0x02 }
+case object DoNotQueue       extends RequestNameFlag { val code = 0x04 }
+
+sealed trait RequestNameReply { val code: Int }
+case object NamePrimaryOwner extends RequestNameReply { val code = 1 }
+case object NameInQueue      extends RequestNameReply { val code = 2 }
+case object NameExists       extends RequestNameReply { val code = 3 }
+case object NameAlreadyOwner extends RequestNameReply { val code = 4 }
+case class UnknownRequestNameReply(val code: Int) extends RequestNameReply
+
+sealed trait ReleaseNameReply { val code: Int }
+case object NameReleased    extends ReleaseNameReply { val code = 1 }
+case object NameNonExistent extends ReleaseNameReply { val code = 2 }
+case object NameNotOwner    extends ReleaseNameReply { val code = 3 }
+case class UnknownReleaseNameReply(val code: Int) extends ReleaseNameReply
+
+// Method replies
+sealed trait Reply
+case class ReplyReturn(v: Vector[Field])                      extends Reply
+case class ReplyError(errorName: ErrorName, v: Vector[Field]) extends Reply
+
+trait ExportedObject {
+  def methods: List[MemberName]
+  def invoke(method: MemberName, args: Vector[Field]): Reply
+}
+
 sealed trait Connection extends StrictLogging {
   type SignalHandler
 
   import Connection._
 
-  val transport: Transport
+  def transport: Transport
 
   def disconnect(): Unit
+
+  def requestName(name: BusName, flags: Seq[RequestNameFlag]): Throwable \/ RequestNameReply
+
+  def releaseName(name: BusName): Throwable \/ ReleaseNameReply
 
   def subscribe(matcher: SignalMatchSpec, cb: Signal => Unit): Throwable \/ SignalHandler
 
@@ -61,11 +97,15 @@ sealed trait Connection extends StrictLogging {
 
   def callNoReply(method: MethodCall): Unit
 
+  def emit(signal: Signal): Unit
+
+  def export(path: ObjectPath, obj: ExportedObject): Throwable \/ Unit
+
   protected def authenticate(): Throwable \/ Boolean
 
   protected def startReadLoop(): Unit
 
-  protected def onMessage(msg: DBusMessage): Unit
+  protected def onMessage(serial: Int, msg: DBusMessage): Unit
 }
 
 object Connection extends StrictLogging {
@@ -118,14 +158,37 @@ class ConnectionImpl(val transport: Transport) extends Connection {
   case class Handler(spec: SignalMatchSpec, cb: Signal => Unit)
   type SignalHandler = Handler
 
+  type SerialNumber = Int
+
   import Connection._
   val serialNumber = new AtomicInteger(1)
 
-  val outstandingCalls = Ref(Map.empty[Int, Promise[Vector[Field]]]).single
+  val outstandingCalls = Ref(Map.empty[SerialNumber, Promise[Vector[Field]]]).single
   val subscriptions = Ref(List.empty[Handler]).single
+
+  val exportedObjects = Ref(Map.empty[ObjectPath, ExportedObject]).single
+
+  val exportedRoot = new ExportedObject {
+    def methods: List[MemberName] = ???
+    def invoke(method: MemberName, args: Vector[Field]): Reply =
+      method match {
+        case MemberName("introspect") => ???
+        case _ => ???
+      }
+  }
 
 
   def disconnect(): Unit = transport.disconnect()
+
+  def requestName(name: BusName, flags: Seq[RequestNameFlag]): Throwable \/ RequestNameReply =
+    for {
+      r <- call(DBusPath, DBusInterface, "RequestName", DBusName, Vector(FieldString(name.name), FieldWord32(encodeBitFieldInt(flags))))
+    } yield decodeRequestNameReply(r(0).asInt)
+
+  def releaseName(name: BusName): Throwable \/ ReleaseNameReply =
+    for {
+      r <- call(DBusPath, DBusInterface, "ReleaseName", DBusName, Vector(FieldString(name.name)))
+    } yield decodeReleaseNameReply(r(0).asInt)
 
   def subscribe(spec: SignalMatchSpec, cb: Signal => Unit): Throwable \/ SignalHandler = {
     for {
@@ -170,6 +233,22 @@ class ConnectionImpl(val transport: Transport) extends Connection {
       } yield ()
   }
 
+  def emit(signal: Signal): Unit = {
+    val _ =
+      for {
+        s <- serialNumber.getAndIncrement().right
+        _ = logger.trace(s"call: s=$s, signal=$signal")
+        b <- DBusMessageCodec.encode(signal, s)
+        _ <- transport.send(b)
+      } yield ()
+  }
+
+  def export(path: ObjectPath, obj: ExportedObject): Throwable \/ Unit = {
+    \/.fromTryCatchNonFatal {
+      exportedObjects transform { _ + ((path, obj))}
+    }
+  }
+
   private def awaitOrThrowable[T](f: Future[T], atMost: Duration): Throwable \/ T =
     \/.fromTryCatchNonFatal {
       Await.result(f, atMost)
@@ -188,12 +267,19 @@ class ConnectionImpl(val transport: Transport) extends Connection {
   protected def startReadLoop(): Unit =
     transport.startReadLoop(onMessage)
 
-  protected def onMessage(msg: DBusMessage): Unit = {
-    logger.debug(s"onMessage:  msg=$msg")
+  protected def onMessage(serial: Int, msg: DBusMessage): Unit = {
+    logger.debug(s"onMessage:  serial=$serial, msg=$msg")
     val _ =
       msg match {
-        case MethodCall(_, _, _, _, _, _, _, b) =>
-          logger.debug(s"MethodCall not supported yet.")
+        case MethodCall(p, i, m, s, _, _, _, b) =>
+          val response =
+            exportedObjects().get(p).map(_.invoke(m, b)) match {
+              case Some(ReplyReturn(v))   => MethodReturn(serial, None, s, v)
+              case Some(ReplyError(e, v)) => Error(e, i, serial, None, s, v)
+              case None => Error("org.freedesktop.DBus.Error.Failed", i, serial, None, s, Vector(FieldString(s"Object $p not found")))
+            }
+          logger.debug(s"onMessage:  response=$response")
+          DBusMessageCodec.encode(response, serialNumber.getAndIncrement()).map(transport.send(_))
         case MethodReturn(replySerial, _, _, b) =>
           for {
             p <- outstandingCalls().get(replySerial)
@@ -210,4 +296,21 @@ class ConnectionImpl(val transport: Transport) extends Connection {
           subscriptions().filter(_.spec.matchesSignal(s)) foreach { h => h.cb(s) }
       }
   }
+
+  private def decodeRequestNameReply(reply: Int): RequestNameReply =
+    reply match {
+      case 1 => NamePrimaryOwner
+      case 2 => NameInQueue
+      case 3 => NameExists
+      case 4 => NameAlreadyOwner
+      case _ => UnknownRequestNameReply(reply)
+    }
+
+  private def decodeReleaseNameReply(reply: Int): ReleaseNameReply =
+    reply match {
+      case 1 => NameReleased
+      case 2 => NameNonExistent
+      case 3 => NameNotOwner
+      case _ => UnknownReleaseNameReply(reply)
+    }
 }

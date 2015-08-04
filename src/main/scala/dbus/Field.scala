@@ -18,6 +18,7 @@ trait Fields {
     def asObjectPath: ObjectPath = throw new Exception(s"Not an ObjectPath field")
     def asSignature: Signature = throw new Exception(s"Not a Signature field")
     def asArray: Vector[Field] = throw new Exception(s"Not an array field")
+    def asMap: Map[Field, Field] = throw new Exception(s"Not a dictionary field")
 
   }
 
@@ -102,7 +103,9 @@ trait Fields {
     val t = TypeVariant
   }
 
-  case class FieldDictionary(t: TypeDictionary, v: Vector[(Field, Field)]) extends Field
+  case class FieldDictionary(t: TypeDictionary, v: Vector[(Field, Field)]) extends Field {
+    override def asMap = v.toMap
+  }
 
   // type Message = Vector[Field]
 
