@@ -67,8 +67,10 @@ case class ReplyError(errorName: ErrorName, v: Vector[Field]) extends Reply
 
 trait ExportedObject {
   def methods: List[MemberName]
+  def introspectData: String
   def invoke(method: MemberName, args: Vector[Field]): Reply
 }
+
 
 sealed trait Connection extends StrictLogging {
   type SignalHandler
@@ -169,14 +171,29 @@ class ConnectionImpl(val transport: Transport) extends Connection {
   val exportedObjects = Ref(Map.empty[ObjectPath, ExportedObject]).single
 
   val exportedRoot = new ExportedObject {
-    def methods: List[MemberName] = ???
+    def methods: List[MemberName] = List.empty[MemberName]
     def invoke(method: MemberName, args: Vector[Field]): Reply =
       method match {
-        case MemberName("introspect") => ???
-        case _ => ???
+        case MemberName("Introspect") => introspect()
+        case _                        => ReplyError("org.freedesktop.dbus.Error", Vector(FieldString(s"Unknown method $method")))
       }
+
+    val docHeader = """<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+         "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">"""
+    val introspectData = """
+        <node>
+          <interface name="org.freedesktop.DBus.Introspectable.Introspect">
+             <method name="Introspect">
+               <arg name="xml_data" type="s" direction="out"/>
+             </method>
+          </interface>
+       </node>
+"""
+    def exportedData = exportedObjects().values map (_.introspectData) mkString("\n")
+    def introspect() = ReplyReturn(Vector(FieldString(docHeader + "\n" + exportedData)))
   }
 
+  export("/", exportedRoot)
 
   def disconnect(): Unit = transport.disconnect()
 
@@ -218,7 +235,6 @@ class ConnectionImpl(val transport: Transport) extends Connection {
       s <- serialNumber.getAndIncrement().right
       p <- (Promise[Vector[Field]]).right
       _ = outstandingCalls transform { _ + ((s, p)) }
-      _ = logger.trace(s"call: s=$s, method=$method")
       b <- DBusMessageCodec.encode(method, s)
       _ <- transport.send(b)
       r <- awaitOrThrowable(p.future, 5.seconds)

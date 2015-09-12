@@ -20,7 +20,7 @@ class ExportedExample(underlying: Example) extends ExportedObject with StrictLog
   val docHeader = """<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
          "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">"""
   val introspectData = """
-        <node name="/org/saegesser/echo">
+        <node name="org/saegesser/echo">
           <interface name="org.saegesser.Example">
             <method name="echo">
               <arg name="msg" type="s" direction="in"/>
@@ -28,7 +28,7 @@ class ExportedExample(underlying: Example) extends ExportedObject with StrictLog
             </method>
           </interface>
           <interface name="org.freedesktop.DBus.Introspectable.Introspect">
-             <method name="introspect">
+             <method name="Introspect">
                <arg name="xml_data" type="s" direction="out"/>
              </method>
           </interface>
@@ -39,7 +39,7 @@ class ExportedExample(underlying: Example) extends ExportedObject with StrictLog
   def invoke(method: MemberName, args: Vector[Field]): Reply =
     method match {
       case MemberName("echo")       => invoke_echo(args)
-      case MemberName("introspect") => introspect()
+      case MemberName("Introspect") => introspect()
       case _                        => ReplyError("org.freedesktop.dbus.Error", Vector(FieldString(s"Unknown method $method")))
     }
 
