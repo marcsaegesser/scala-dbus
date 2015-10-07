@@ -20,19 +20,17 @@ class ExportedExample(underlying: Example) extends ExportedObject with StrictLog
   val docHeader = """<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
          "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">"""
   val introspectData = """
-        <node name="org/saegesser/echo">
           <interface name="org.saegesser.Example">
             <method name="echo">
               <arg name="msg" type="s" direction="in"/>
               <arg name="result" type="s" direction="out"/>
             </method>
           </interface>
-          <interface name="org.freedesktop.DBus.Introspectable.Introspect">
+          <interface name="org.freedesktop.DBus.Introspectable">
              <method name="Introspect">
                <arg name="xml_data" type="s" direction="out"/>
              </method>
           </interface>
-       </node>
 """
   def introspect() = ReplyReturn(Vector(FieldString(docHeader + "\n" + introspectData)))
 

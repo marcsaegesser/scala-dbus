@@ -169,31 +169,7 @@ class ConnectionImpl(val transport: Transport) extends Connection {
   val subscriptions = Ref(List.empty[Handler]).single
 
   val exportedObjects = Ref(Map.empty[ObjectPath, ExportedObject]).single
-
-  val exportedRoot = new ExportedObject {
-    def methods: List[MemberName] = List.empty[MemberName]
-    def invoke(method: MemberName, args: Vector[Field]): Reply =
-      method match {
-        case MemberName("Introspect") => introspect()
-        case _                        => ReplyError("org.freedesktop.dbus.Error", Vector(FieldString(s"Unknown method $method")))
-      }
-
-    val docHeader = """<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
-         "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">"""
-    val introspectData = """
-        <node>
-          <interface name="org.freedesktop.DBus.Introspectable.Introspect">
-             <method name="Introspect">
-               <arg name="xml_data" type="s" direction="out"/>
-             </method>
-          </interface>
-       </node>
-"""
-    def exportedData = exportedObjects().values map (_.introspectData) mkString("\n")
-    def introspect() = ReplyReturn(Vector(FieldString(docHeader + "\n" + exportedData)))
-  }
-
-  export("/", exportedRoot)
+  val introspectHierarchy = Ref(IntrospectHierarchy.Empty).single
 
   def disconnect(): Unit = transport.disconnect()
 
@@ -262,6 +238,8 @@ class ConnectionImpl(val transport: Transport) extends Connection {
   def export(path: ObjectPath, obj: ExportedObject): Throwable \/ Unit = {
     \/.fromTryCatchNonFatal {
       exportedObjects transform { _ + ((path, obj))}
+      logger.debug(s"export: data=${obj.introspectData}")
+      introspectHierarchy transform { IntrospectHierarchy.addObject(_, path, obj.introspectData) }
     }
   }
 
@@ -287,6 +265,13 @@ class ConnectionImpl(val transport: Transport) extends Connection {
     logger.debug(s"onMessage:  serial=$serial, msg=$msg")
     val _ =
       msg match {
+        case MethodCall(p, Some(InterfaceName("org.freedesktop.DBus.Introspectable")), MemberName("Introspect"), s, _, _, _, _) =>
+          val response = handleIntrospect(p) match {
+            case Some(ReplyReturn(v))   => MethodReturn(serial, None, s, v)
+            case None => Error("org.freedesktop.DBus.Error.Failed", Some(InterfaceName("org.freedesktop.DBus.Introspectable")), serial, None, s, Vector(FieldString(s"Object $p not found")))
+          }
+          logger.debug(s"onMessage:  response=$response")
+          DBusMessageCodec.encode(response, serialNumber.getAndIncrement()).map(transport.send(_))
         case MethodCall(p, i, m, s, _, _, _, b) =>
           val response =
             exportedObjects().get(p).map(_.invoke(m, b)) match {
@@ -311,6 +296,23 @@ class ConnectionImpl(val transport: Transport) extends Connection {
         case s @ Signal(_, _, _, _, _, _, _) =>
           subscriptions().filter(_.spec.matchesSignal(s)) foreach { h => h.cb(s) }
       }
+  }
+
+  private def handleIntrospect(path: ObjectPath) = {
+    logger.debug(s"handleIntrospect:  IN - path=$path")
+    logger.debug(s"handleIntrospect:  path.path=${path.path}")
+    val nodes = IntrospectHierarchy.lookupNode(introspectHierarchy(), path)
+    nodes map { ns =>
+      val n = ns map { _.show }
+      val xml = s"""
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+${n.mkString("\n")}
+</node>
+"""
+      ReplyReturn(Vector(FieldString(xml)))
+    }
   }
 
   private def decodeRequestNameReply(reply: Int): RequestNameReply =
