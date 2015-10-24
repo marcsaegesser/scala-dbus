@@ -1,6 +1,6 @@
 name := "Scala-DBus"
 
-scalaVersion in ThisBuild := "2.11.6"
+scalaVersion in ThisBuild := "2.11.7"
 
 scalacOptions in ThisBuild ++= Seq(
   "-feature",
@@ -12,8 +12,8 @@ scalacOptions in ThisBuild ++= Seq(
   "-Xlint",
   "-Xfatal-warnings",
   "-unchecked",
-  "-language:implicitConversions"
-)
+  "-language:implicitConversions",
+  "-language:experimental.macros")
 
 resolvers += "tpolecat"  at "http://dl.bintray.com/tpolecat/maven"
 resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"

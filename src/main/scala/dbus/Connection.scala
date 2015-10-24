@@ -66,8 +66,7 @@ case class ReplyReturn(v: Vector[Field])                      extends Reply
 case class ReplyError(errorName: ErrorName, v: Vector[Field]) extends Reply
 
 trait ExportedObject {
-  def methods: List[MemberName]
-  def introspectData: String
+  def interfaces: List[Interface]
   def invoke(method: MemberName, args: Vector[Field]): Reply
 }
 
@@ -238,8 +237,8 @@ class ConnectionImpl(val transport: Transport) extends Connection {
   def export(path: ObjectPath, obj: ExportedObject): Throwable \/ Unit = {
     \/.fromTryCatchNonFatal {
       exportedObjects transform { _ + ((path, obj))}
-      logger.debug(s"export: data=${obj.introspectData}")
-      introspectHierarchy transform { IntrospectHierarchy.addObject(_, path, obj.introspectData) }
+      logger.debug(s"export: data=${obj.interfaces}")
+      introspectHierarchy transform { IntrospectHierarchy.addObject(_, path, obj.interfaces.map(_.toXML).mkString("\n")) }
     }
   }
 

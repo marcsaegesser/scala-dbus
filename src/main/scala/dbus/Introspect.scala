@@ -4,27 +4,48 @@ import scalaz._,Scalaz._
 import DBus._
 
 trait Introspect {
+  case class DBusInterface() extends scala.annotation.StaticAnnotation
+
   sealed trait ArgDirection
-  case object ArgIn extends ArgDirection
-  case object ArgOut extends ArgDirection
+  case object ArgIn  extends ArgDirection { override def toString = "in" }
+  case object ArgOut extends ArgDirection { override def toString = "out"}
 
-  case class Object(path: ObjectPath, interfaces: List[Interface], children: List[Object])
+  sealed trait PropAccess
+  case object PropRead      extends PropAccess { override def toString = "read" }
+  case object PropWrite     extends PropAccess { override def toString = "write" }
+  case object PropReadWrite extends PropAccess { override def toString = "readwrite" }
 
-  case class Interface(name: InterfaceName, methods: List[Method], signals: List[Sig], properties: List[Property])
-
-  case class Method(name: MemberName, args: List[MethodArg])
-
-  case class MethodArg(name: String, argType: Type, direction: ArgDirection)
-
-  case class Property(name: String, propType: Type, isRead: Boolean, isWrite: Boolean)
-
-  case class Sig(name: MemberName, args: List[SigArg])
-
-  case class SigArg(name: String, argType: Type)
-
-  trait Introspectable {
-    def introspect(): String
+  case class Object(path: ObjectPath, interfaces: List[Interface]) {
+    def toXML = s"""${interfaces map { _.toXML }}"""
   }
+
+  case class Interface(name: InterfaceName, methods: List[Method], signals: List[Sig], properties: List[Property]) {
+    def toXML = s"""<interface name="${name.name}">${methods.map(_.toXML).mkString("\n", "\n", "")}${signals.map(_.toXML).mkString("\n", "\n", "")}${properties.map(_.toXML).mkString("\n", "\n", "")}</interface>"""
+  }
+
+  case class Method(name: MemberName, args: List[MethodArg]) {
+    def toXML = s"""  <method name="${name.name}">${args.map(_.toXML).mkString("\n", "\n", "\n")}  </method>"""
+  }
+
+  case class MethodArg(name: String, argType: Type, direction: ArgDirection) {
+    def toXML = s"""    <arg name="${name}" type="${argType.code}" direction="$direction"/>"""
+  }
+
+  case class Property(name: String, propType: Type, access: PropAccess) {
+    def toXML: String = s"""  <property name="$name" type=${propType.code} access="$access"/>"""
+  }
+
+  case class Sig(name: MemberName, args: List[SigArg]) {
+    def toXML: String = s"""  <signal name="${name.name}">${args.map(_.toXML).mkString("\n", "\n", "\n")}  </signal>"""
+  }
+
+  case class SigArg(name: String, argType: Type) {
+    def toXML = s"""    <arg name="${name}" type="${argType.code}"/>"""
+  }
+}
+
+object Introspect {
+  def generateExport[T]: ExportedObject = macro macros.Macros.materializeDBusExportImpl[T]
 }
 
 object IntrospectHierarchy {

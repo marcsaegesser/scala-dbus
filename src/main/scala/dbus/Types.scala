@@ -24,8 +24,8 @@ trait Types {
   case object TypeString        extends AtomicType { val code = "s"; val align = 4 }
   case object TypeSignature     extends AtomicType { val code = "g"; val align = 1 }
   case object TypeObjectPath    extends AtomicType { val code = "o"; val align = 4 }
-  case object TypeVariant       extends Type { val code = "v"; val align = 1 }
-  case class TypeArray(t: Type) extends Type { val code = s"a${t.code}"; val align = 4 }
+  case object TypeVariant       extends Type       { val code = "v"; val align = 1 }
+  case class TypeArray(t: Type) extends Type       { val code = s"a${t.code}"; val align = 4 }
   case class TypeDictionary(k: AtomicType, v: Type) extends Type { val code = s"a{${k.code}${v.code}}"; val align = 4 }
   case class TypeStructure(ts: List[Type]) extends Type { val code = ts map (_.code) mkString ("(", "", ")"); val align = 8 }
 

@@ -2,7 +2,6 @@ package dbus
 
 import scalaz._,Scalaz._
 import org.scalatest._
-import dbus._
 
 class IntrospectUnitTests extends WordSpec with ShouldMatchers {
   import DBus._
