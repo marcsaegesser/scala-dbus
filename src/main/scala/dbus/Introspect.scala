@@ -32,7 +32,7 @@ trait Introspect {
   }
 
   case class Property(name: String, propType: Type, access: PropAccess) {
-    def toXML: String = s"""  <property name="$name" type=${propType.code} access="$access"/>"""
+    def toXML: String = s"""  <property name="$name" type="${propType.code}" access="$access"/>"""
   }
 
   case class Sig(name: MemberName, args: List[SigArg]) {
@@ -45,7 +45,7 @@ trait Introspect {
 }
 
 object Introspect {
-  def generateExport[T]: ExportedObject = macro macros.Macros.materializeDBusExportImpl[T]
+  def generateExport[T]: T => ExportedObject = macro macros.Macros.materializeDBusExportImpl[T]
 }
 
 object IntrospectHierarchy {

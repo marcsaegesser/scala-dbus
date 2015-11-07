@@ -67,7 +67,7 @@ case class ReplyError(errorName: ErrorName, v: Vector[Field]) extends Reply
 
 trait ExportedObject {
   def interfaces: List[Interface]
-  def invoke(method: MemberName, args: Vector[Field]): Reply
+  def invoke(method: MemberName, interface: Option[InterfaceName], args: Vector[Field]): Reply
 }
 
 
@@ -273,7 +273,7 @@ class ConnectionImpl(val transport: Transport) extends Connection {
           DBusMessageCodec.encode(response, serialNumber.getAndIncrement()).map(transport.send(_))
         case MethodCall(p, i, m, s, _, _, _, b) =>
           val response =
-            exportedObjects().get(p).map(_.invoke(m, b)) match {
+            exportedObjects().get(p).map(_.invoke(m, i, b)) match {
               case Some(ReplyReturn(v))   => MethodReturn(serial, None, s, v)
               case Some(ReplyError(e, v)) => Error(e, i, serial, None, s, v)
               case None => Error("org.freedesktop.DBus.Error.Failed", i, serial, None, s, Vector(FieldString(s"Object $p not found")))
