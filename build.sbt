@@ -10,7 +10,7 @@ scalacOptions in ThisBuild ++= Seq(
   "-Ywarn-numeric-widen",
   "-Ywarn-dead-code",
   "-Xlint",
-  "-Xfatal-warnings",
+  // "-Xfatal-warnings",
   "-unchecked",
   "-language:implicitConversions",
   "-language:experimental.macros")

@@ -5,7 +5,6 @@ import scala.util.control.NonFatal
 import scala.collection.mutable.StringBuilder
 import scalaz._,Scalaz._
 import atto._,Atto._
-import DBus._
 
 trait Types {
   sealed trait Type { val code: String; val align: Int }

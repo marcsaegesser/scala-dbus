@@ -1,7 +1,5 @@
 package dbus
 
-import dbus._
-
 trait Fields {
   import DBus._
 

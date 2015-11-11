@@ -108,16 +108,18 @@ object Macros extends MacrosCompat {
       .map { case (i, m) =>
         val invokeMethod = createTermName(c)(invokeMethodName(i, m.name))
         val methodName = createTermName(c)(m.name.decodedName.toString)
-        val ms = m.paramLists.flatten zip Stream.from(0)
-        ms.map { case (a, n) =>
+        val params = m.paramLists.flatten zip Stream.from(0)
+        val args = params.map { case (a, n) =>
           for {
             argTpe <- type2Type(c)(a.info)
             asTpe = dbusType2Value(c)(argTpe)
           } yield q"""args($n).$asTpe"""
-        }.sequenceU.map { aa =>
+        }.sequenceU
+        args.map { aa =>
           q"""def $invokeMethod(args: Vector[Field]): Reply =
                 try {
                   val result = underlying.$methodName(..$aa)
+                  ReplyReturn(Vector(FieldString(result)))
                 } catch {
                   case util.control.NonFatal(t) => ReplyError(t.getClass.getName, Vector(FieldString(t.getMessage)))
                 }
@@ -137,7 +139,7 @@ object Macros extends MacrosCompat {
           q"""Invoker(InterfaceName($iface), $invokeMethod)"""
         }
         q"""MemberName($methodName) -> List(..$invkrs)"""
-      }.success[String]
+      }.successNel[String]
 
     (invokers |@| invokeMethods)((_, _))
   }
