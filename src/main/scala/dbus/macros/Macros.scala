@@ -5,58 +5,6 @@ import dbus._,DBus._
 
 object Macros extends MacrosCompat {
 
-  def dbusType2Tree(c: Context)(t: dbus.DBus.Type): c.universe.Tree = {
-    import c.universe._
-    t match {
-      case TypeBoolean    => q"TypeBoolean"
-      case TypeWord8      => q"TypeWord8"
-      case TypeWord16     => q"TypeWord16"
-      case TypeWord32     => q"TypeWord32"
-      case TypeWord64     => q"TypeWord64"
-      case TypeInt16      => q"TypeInt16"
-      case TypeInt32      => q"TypeInt32"
-      case TypeInt64      => q"TypeInt64"
-      case TypeDouble     => q"TypeDouble"
-      case TypeString     => q"TypeString"
-      case TypeUnixFD     => q"TypeUnixFD"
-      case TypeSignature  => q"TypeSignature"
-      case TypeObjectPath => q"TypeObjectPath"
-      case TypeVariant    => q"TypeVariant"
-      case TypeArray(a)   =>
-        val atree = (dbusType2Tree(c)(a))
-        q"TypeArray($atree)"
-      case TypeDictionary(k, v) =>
-        val ktree = (dbusType2Tree(c)(k))
-        val vtree = (dbusType2Tree(c)(v))
-        q"TypeDictionary($ktree, $vtree)"
-      case TypeStructure(ts) =>
-        val tsTree = ts map (dbusType2Tree(c)(_))
-        q"TypeStructure(List(..$tsTree))"
-    }
-  }
-
-  def dbusType2Value(c: Context)(t: dbus.DBus.Type): c.universe.TermName = {
-    t match {
-      case TypeBoolean    => createTermName(c)("asBoolean")
-      case TypeWord8      => createTermName((c))("asByte")
-      case TypeWord16     => createTermName((c))("asShort")
-      case TypeWord32     => createTermName((c))("asInt")
-      case TypeWord64     => createTermName((c))("asLong")
-      case TypeInt16      => createTermName((c))("asShort")
-      case TypeInt32      => createTermName((c))("asInt")
-      case TypeInt64      => createTermName((c))("asLong")
-      case TypeDouble     => createTermName((c))("asDouble")
-      case TypeString     => createTermName((c))("asString")
-      case TypeUnixFD     => createTermName((c))("asInt")
-      case TypeSignature  => createTermName((c))("asSignature")
-      case TypeObjectPath => createTermName((c))("asObjectPath")
-      case TypeVariant    => ???
-      case TypeArray(a)   => createTermName((c))("asArray")
-      case TypeDictionary(k, v) => createTermName(c)("asMap")
-      case TypeStructure(ts) => ???
-    }
-  }
-
   def materializeDBusExportImpl[T: c.WeakTypeTag](c: Context): c.Expr[T => dbus.ExportedObject] = {
     import c.universe._
 
@@ -200,6 +148,19 @@ object Macros extends MacrosCompat {
     tpe.baseClasses.map(encodeDBusInterface(c)(_)).sequenceU.map(_.flatten)
 
 
+  def isMap(c: Context)(t: c.universe.Type): Boolean =
+    t.baseClasses map(_.fullName) exists(n => n == "scala.collection.immutable.Map" || n == "scala.collection.mutable.Map")
+
+  def getMapTypes(c: Context)(t: c.universe.Type): NonEmptyList[String] \/ (ValidationNel[String, AtomicType], ValidationNel[String, Type]) =
+    t.typeArgs match {
+      case k :: v :: _ => (type2AtomicType(c)(k), type2Type(c)(v)).right
+      case _           => NonEmptyList("Wrong number of type arguments for Map").left
+    }
+
+
+  def makeMapType(kt: ValidationNel[String, AtomicType], vt: ValidationNel[String, Type]): ValidationNel[String, Type] =
+    (kt |@| vt)(TypeDictionary.apply(_, _))
+
   def type2Type(c: Context)(t: c.universe.Type): ValidationNel[String, dbus.DBus.Type] = {
     if(t =:= c.universe.definitions.BooleanTpe) TypeBoolean.successNel
     else if(t =:= c.universe.definitions.ByteTpe) TypeWord8.successNel
@@ -208,7 +169,70 @@ object Macros extends MacrosCompat {
     else if(t =:= c.universe.definitions.LongTpe) TypeInt64.successNel
     else if(t =:= c.universe.definitions.DoubleTpe) TypeDouble.successNel
     else if(t =:= c.universe.definitions.StringClass.selfType) TypeString.successNel
-    else s"$t is not a supported type".failureNel
+    else if(isMap(c)(t)) getMapTypes(c)(t).map { (makeMapType _).tupled(_) } fold (Failure(_), identity)
+    else s"$t is not a supported Type".failureNel
   }
 
+  def type2AtomicType(c: Context)(t: c.universe.Type): ValidationNel[String, dbus.DBus.AtomicType] = {
+    if(t =:= c.universe.definitions.BooleanTpe) TypeBoolean.successNel
+    else if(t =:= c.universe.definitions.ByteTpe) TypeWord8.successNel
+    else if(t =:= c.universe.definitions.ShortTpe) TypeInt16.successNel
+    else if(t =:= c.universe.definitions.IntTpe) TypeInt32.successNel
+    else if(t =:= c.universe.definitions.LongTpe) TypeInt64.successNel
+    else if(t =:= c.universe.definitions.DoubleTpe) TypeDouble.successNel
+    else if(t =:= c.universe.definitions.StringClass.selfType) TypeString.successNel
+    else s"$t is not a supported AtomicType".failureNel
+  }
+
+  def dbusType2Tree(c: Context)(t: dbus.DBus.Type): c.universe.Tree = {
+    import c.universe._
+    t match {
+      case TypeBoolean    => q"TypeBoolean"
+      case TypeWord8      => q"TypeWord8"
+      case TypeWord16     => q"TypeWord16"
+      case TypeWord32     => q"TypeWord32"
+      case TypeWord64     => q"TypeWord64"
+      case TypeInt16      => q"TypeInt16"
+      case TypeInt32      => q"TypeInt32"
+      case TypeInt64      => q"TypeInt64"
+      case TypeDouble     => q"TypeDouble"
+      case TypeString     => q"TypeString"
+      case TypeUnixFD     => q"TypeUnixFD"
+      case TypeSignature  => q"TypeSignature"
+      case TypeObjectPath => q"TypeObjectPath"
+      case TypeVariant    => q"TypeVariant"
+      case TypeArray(a)   =>
+        val atree = (dbusType2Tree(c)(a))
+        q"TypeArray($atree)"
+      case TypeDictionary(k, v) =>
+        val ktree = (dbusType2Tree(c)(k))
+        val vtree = (dbusType2Tree(c)(v))
+        q"TypeDictionary($ktree, $vtree)"
+      case TypeStructure(ts) =>
+        val tsTree = ts map (dbusType2Tree(c)(_))
+        q"TypeStructure(List(..$tsTree))"
+    }
+  }
+
+  def dbusType2Value(c: Context)(t: dbus.DBus.Type): c.universe.TermName = {
+    t match {
+      case TypeBoolean    => createTermName(c)("asBoolean")
+      case TypeWord8      => createTermName((c))("asByte")
+      case TypeWord16     => createTermName((c))("asShort")
+      case TypeWord32     => createTermName((c))("asInt")
+      case TypeWord64     => createTermName((c))("asLong")
+      case TypeInt16      => createTermName((c))("asShort")
+      case TypeInt32      => createTermName((c))("asInt")
+      case TypeInt64      => createTermName((c))("asLong")
+      case TypeDouble     => createTermName((c))("asDouble")
+      case TypeString     => createTermName((c))("asString")
+      case TypeUnixFD     => createTermName((c))("asInt")
+      case TypeSignature  => createTermName((c))("asSignature")
+      case TypeObjectPath => createTermName((c))("asObjectPath")
+      case TypeVariant    => ???
+      case TypeArray(a)   => createTermName((c))("asArray")
+      case TypeDictionary(k, v) => createTermName(c)("asMap")
+      case TypeStructure(ts) => ???
+    }
+  }
 }
