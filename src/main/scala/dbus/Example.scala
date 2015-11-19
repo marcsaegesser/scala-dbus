@@ -18,6 +18,15 @@ class Example extends Echo with StrictLogging {
   }
 }
 
+@DBusInterface
+trait Fubar {
+  val m: Map[Int, String]
+}
+
+class AFubar extends Fubar {
+  val m = Map(1 -> "One", 2 -> "Two")
+}
+
 // class ExportedExample(underlying: Example) extends ExportedObject with StrictLogging {
 //   def interfaces = List(Interface("org.saegesser.Example", List(Method("echo", List(MethodArg("msg", TypeString, ArgIn)))), List(), List()))
 
