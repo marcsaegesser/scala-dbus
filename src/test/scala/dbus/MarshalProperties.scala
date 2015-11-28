@@ -52,7 +52,7 @@ object DBusMarshalSpecification extends Properties("Marshal") {
   def genVariant: Gen[FieldVariant] = lzy(genField map (FieldVariant.apply))
   def genStructure: Gen[FieldStructure] = lzy(genMessage map (m => FieldStructure(messageSignature_(m), m)))
 
-  def genMessage: Gen[Vector[Field]] = lzy(nonEmptyContainerOf[Vector, Field](genField) suchThat(m => messageSignature_(m).toString.length <= 255))
+  def genMessage: Gen[Vector[Field]] = lzy(nonEmptyContainerOf[Vector, Field](genField) suchThat(m => messageSignature(m).isRight))
   implicit lazy val arbMessage = Arbitrary(genMessage)
 
   property("roundTrip") = forAll { m: Vector[Field] =>

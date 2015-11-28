@@ -8,11 +8,10 @@ import org.scalatest._
 
 class DBusMessageCodecUnitTests extends WordSpec with ShouldMatchers with StrictLogging {
   import DBus._
-  import Connection._
 
   "DBusMessageCodec" should {
     "roundtrip Hello method call" in {
-      val hello = MethodCall(DBusPath, DBusInterface.some, "Hello".toMemberName_, None, DBusName.some, true, false, Vector.empty[Field])
+      val hello = MethodCall("/a/b/c", Some("a.b.c.Name"), "Hello", None, Some("a.b.c"), true, false, Vector.empty[Field])
       val result =
         for {
           bits <- DBusMessageCodec.encode(hello, 1)
@@ -23,7 +22,6 @@ class DBusMessageCodecUnitTests extends WordSpec with ShouldMatchers with Strict
     }
 
     "roundtrip MethodReturn" in {
-      //MethodReturn(2,None,Some(BusName(:1.148)),Vector(FieldString(Echo:  msg)))
       val methodReturn = MethodReturn(123, None, Some(BusName(":1.148")), Vector(FieldString("Echo: msg")))
       val result =
         for {

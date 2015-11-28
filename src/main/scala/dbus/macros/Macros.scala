@@ -17,12 +17,12 @@ object Macros extends MacrosCompat {
         val exported =
           q"""(underlying: $tpe) => new ExportedObject {
             def interfaces: List[Interface] = List(..$is)
-            type MethodInvoker = Vector[Field] => Reply
+            type MethodInvoker = collection.Seq[Field] => Reply
             case class Invoker(interface: InterfaceName, invoker: MethodInvoker)
             val invokers = Map[MemberName, List[Invoker]](
               ..$ivs
             )
-            def invoke(method: MemberName, interface: Option[InterfaceName], args: Vector[Field]): Reply = {
+            def invoke(method: MemberName, interface: Option[InterfaceName], args: collection.Seq[Field]): Reply = {
               val is = invokers getOrElse(method, List.empty[Invoker]) filter { i => interface.isEmpty || interface.contains(i.interface) }
               is match {
                 case h :: Nil => h.invoker(args)
@@ -36,6 +36,38 @@ object Macros extends MacrosCompat {
       }
 
     expr fold (s => throw new Exception(s.toList.mkString(", ")), identity)
+  }
+
+  def materializeDBusCodecImpl[T: c.WeakTypeTag](c: Context): c.Expr[DBusCodec[T]] = {
+    import c.universe._
+
+    val tpe = weakTypeOf[T]
+    val args = getConstructorArgs(c)(tpe)
+    val encodeFields =
+      args map { case (n, t) =>
+        val fieldName = createTermName(c)(n)
+        q"""implicitly[DBusCodec[$t]].encode(t.$fieldName)"""
+      }
+    val decodeFields =
+      (args zip Stream.from(0)) map { case ((n, t), i) =>
+        val fieldName = createTermName(c)(n)
+        q"""implicitly[DBusCodec[$t]].decode(v($i))"""
+      }
+
+    val expr =
+      q"""new DBusCodec[$tpe] {
+        import FieldOps._
+        def encode(t: $tpe): Field = {
+          val fields = Vector(..$encodeFields)
+          FieldStructure(fields.toSignature_, fields)
+        }
+        def decode(f: Field): $tpe =
+          f match {
+            case FieldStructure(s, v) => new $tpe(..$decodeFields)
+            case _ => throw new Exception(s"field $$f is not a Structure")
+          }
+      } """
+    c.Expr[DBusCodec[T]]{expr}
   }
 
   def encodeInvokers(c: Context)(tpe: c.universe.Type): ValidationNel[String, (List[c.universe.Tree], List[c.universe.Tree])] = {
@@ -56,18 +88,17 @@ object Macros extends MacrosCompat {
       .map { case (i, m) =>
         val invokeMethod = createTermName(c)(invokeMethodName(i, m.name))
         val methodName = createTermName(c)(m.name.decodedName.toString)
+        val returnType = m.returnType
         val params = m.paramLists.flatten zip Stream.from(0)
         val args = params.map { case (a, n) =>
-          for {
-            argTpe <- type2Type(c)(a.info)
-            asTpe = dbusType2Value(c)(argTpe)
-          } yield q"""args($n).$asTpe"""
+          val tpe = a.info
+          (q"""implicitly[DBusCodec[$tpe]].decode(args($n))""").successNel[String]
         }.sequenceU
         args.map { aa =>
-          q"""def $invokeMethod(args: Vector[Field]): Reply =
+          q"""def $invokeMethod(args: collection.Seq[Field]): Reply =
                 try {
                   val result = underlying.$methodName(..$aa)
-                  ReplyReturn(Vector(FieldString(result)))
+                  ReplyReturn(Vector(implicitly[DBusCodec[$returnType]].encode(result)))
                 } catch {
                   case util.control.NonFatal(t) => ReplyError(t.getClass.getName, Vector(FieldString(t.getMessage)))
                 }
@@ -101,7 +132,7 @@ object Macros extends MacrosCompat {
       val args = m.paramLists.flatten.map { a =>
         val maybeArg =
           for {
-            argTpe <- type2Type(c)(a.info)
+            argTpe <- type2DBusType(c)(a.info)
             argTree = dbusType2Tree(c)(argTpe)
             argName = a.name.decodedName.toString
           } yield q"""MethodArg($argName, $argTree, ArgIn)"""
@@ -109,7 +140,7 @@ object Macros extends MacrosCompat {
       }
       val maybeRet =
         for {
-          retTpe <- type2Type(c)(m.returnType)
+          retTpe <- type2DBusType(c)(m.returnType)
           retTree = dbusType2Tree(c)(retTpe)
         } yield q"""MethodArg("", $retTree, ArgOut)"""
       val ret = maybeRet leftMap { fs => fs.map(f => s"$mn return value:  $f")}
@@ -121,7 +152,7 @@ object Macros extends MacrosCompat {
   def encodeProperties(c: Context)(ms: Iterable[c.universe.MethodSymbol]): ValidationNel[String, Iterable[c.universe.Tree]] = {
     import c.universe._
     ms.filter(_.isGetter)
-      .map { m => (m.name.decodedName.toString, type2Type(c)(m.returnType), m.setter != c.universe.NoSymbol) }
+      .map { m => (m.name.decodedName.toString, type2DBusType(c)(m.returnType), m.setter != c.universe.NoSymbol) }
       .map {
         case (n, Success(t), true) =>
           val tree = dbusType2Tree(c)(t)
@@ -147,21 +178,58 @@ object Macros extends MacrosCompat {
   private def encodeDBusInterfaces(c: Context)(tpe: c.universe.Type): ValidationNel[String, List[c.universe.Tree]] =
     tpe.baseClasses.map(encodeDBusInterface(c)(_)).sequenceU.map(_.flatten)
 
+  def isList(c: Context)(t: c.universe.Type): Boolean =
+    t.baseClasses map(_.fullName) exists(n => n == "scala.collection.immutable.Seq" || n == "scala.collection.mutable.Seq" || n == "scala.Array")
+
+  def getListType(c: Context)(t: c.universe.Type): NonEmptyList[String] \/ ValidationNel[String, Type] =
+    t.typeArgs match {
+      case a :: Nil => type2DBusType(c)(a).right
+      case _        => NonEmptyList("Wrong number of type arguments for List").left
+    }
+
+  def makeListType(t: ValidationNel[String, Type]): ValidationNel[String, Type] =
+    t.map(TypeArray.apply(_))
 
   def isMap(c: Context)(t: c.universe.Type): Boolean =
     t.baseClasses map(_.fullName) exists(n => n == "scala.collection.immutable.Map" || n == "scala.collection.mutable.Map")
 
   def getMapTypes(c: Context)(t: c.universe.Type): NonEmptyList[String] \/ (ValidationNel[String, AtomicType], ValidationNel[String, Type]) =
     t.typeArgs match {
-      case k :: v :: _ => (type2AtomicType(c)(k), type2Type(c)(v)).right
+      case k :: v :: _ => (type2AtomicType(c)(k), type2DBusType(c)(v)).right
       case _           => NonEmptyList("Wrong number of type arguments for Map").left
     }
-
 
   def makeMapType(kt: ValidationNel[String, AtomicType], vt: ValidationNel[String, Type]): ValidationNel[String, Type] =
     (kt |@| vt)(TypeDictionary.apply(_, _))
 
-  def type2Type(c: Context)(t: c.universe.Type): ValidationNel[String, dbus.DBus.Type] = {
+  def getConstructorArgs(c: Context)(t: c.universe.Type): List[(String, c.universe.Type)] = {
+    import c.universe._
+    getDeclarations(c)(t)
+      .collect { case s: MethodSymbol if s.isPrimaryConstructor && s.paramLists.length == 1 => s}
+      .map { _.typeSignatureIn(t).paramLists.flatten }
+      .flatten
+      .map{ t => (t.name.toString, t.info) }
+      .toList
+  }
+
+  def getConstructorArgsTypes(c: Context)(t: c.universe.Type): ValidationNel[String, List[Type]] = {
+    import c.universe._
+    getDeclarations(c)(t)
+      .collect { case s: MethodSymbol if s.isPrimaryConstructor && s.paramLists.length == 1 => s}
+      .map { _.typeSignatureIn(t).paramLists.flatten }
+      .flatten
+      .map{ t => type2DBusType(c)(t.info) }
+      .toList
+      .sequenceU
+  }
+
+  def isProductType(c: Context)(t: c.universe.Type): Boolean =
+    t.baseClasses map(_.fullName) exists(n => n == "scala.Product")
+
+  def makeStructureType(ts: ValidationNel[String, List[Type]]): ValidationNel[String, Type] =
+    ts.map(TypeStructure(_))
+
+  def type2DBusType(c: Context)(t: c.universe.Type): ValidationNel[String, dbus.DBus.Type] = {
     if(t =:= c.universe.definitions.BooleanTpe) TypeBoolean.successNel
     else if(t =:= c.universe.definitions.ByteTpe) TypeWord8.successNel
     else if(t =:= c.universe.definitions.ShortTpe) TypeInt16.successNel
@@ -169,7 +237,9 @@ object Macros extends MacrosCompat {
     else if(t =:= c.universe.definitions.LongTpe) TypeInt64.successNel
     else if(t =:= c.universe.definitions.DoubleTpe) TypeDouble.successNel
     else if(t =:= c.universe.definitions.StringClass.selfType) TypeString.successNel
+    else if(isList(c)(t)) getListType(c)(t).map { makeListType(_) } fold(Failure(_), identity)
     else if(isMap(c)(t)) getMapTypes(c)(t).map { (makeMapType _).tupled(_) } fold (Failure(_), identity)
+    else if(isProductType(c)(t)) makeStructureType(getConstructorArgsTypes(c)(t))
     else s"$t is not a supported Type".failureNel
   }
 

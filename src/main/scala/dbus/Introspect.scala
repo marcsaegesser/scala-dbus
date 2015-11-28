@@ -44,10 +44,6 @@ trait Introspect {
   }
 }
 
-object Introspect {
-  def generateExport[T]: T => ExportedObject = macro macros.Macros.materializeDBusExportImpl[T]
-}
-
 object IntrospectHierarchy {
   type IntrospectTree = Tree[Node]
   type IntrospectionData = String

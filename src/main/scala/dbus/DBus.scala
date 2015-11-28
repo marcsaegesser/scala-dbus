@@ -5,7 +5,8 @@ trait DBus
     with dbus.Fields
     with dbus.Marshal
     with dbus.Message
-    with dbus.Introspect {
+    with dbus.Introspect
+    with dbus.DBusCodecs {
   sealed trait BusType
   case object SystemBus extends BusType
   case object SessionBus extends BusType

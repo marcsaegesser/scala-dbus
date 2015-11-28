@@ -67,9 +67,12 @@ case class ReplyError(errorName: ErrorName, v: Vector[Field]) extends Reply
 
 trait ExportedObject {
   def interfaces: List[Interface]
-  def invoke(method: MemberName, interface: Option[InterfaceName], args: Vector[Field]): Reply
+  def invoke(method: MemberName, interface: Option[InterfaceName], args: collection.Seq[Field]): Reply
 }
 
+object ExportedObject {
+  def derive[T]: T => ExportedObject = macro macros.Macros.materializeDBusExportImpl[T]
+}
 
 sealed trait Connection extends StrictLogging {
   type SignalHandler

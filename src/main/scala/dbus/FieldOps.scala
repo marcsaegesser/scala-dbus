@@ -1,5 +1,7 @@
 package dbus
 
+import scalaz._,Scalaz._
+
 object FieldOps {
   import DBus._
 
@@ -37,5 +39,11 @@ object FieldOps {
 
   implicit class StringFieldOps(val s: String) extends AnyVal {
     def toField = FieldString(s)
+  }
+
+  implicit class FieldSeqOps[F <: Field](val fs: Seq[F]) extends AnyVal {
+    def toSignature: Throwable \/ Signature = fs.map(_.t).toSignature
+    def toSignatureO: Option[Signature] = toSignature.toOption
+    def toSignature_ : Signature = toSignature fold (throw _, identity)
   }
 }

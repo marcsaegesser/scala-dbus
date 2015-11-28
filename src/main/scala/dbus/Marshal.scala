@@ -29,7 +29,7 @@ trait Marshal {
   def marshal_[F[_]: Foldable](m: F[Field], e: ByteOrdering = ByteOrdering.BigEndian): BitVector =
     marshal(m, e) fold (throw _, identity)
 
-  import DBusCodecs._
+  import DBusSCodecs._
 
   def encodeField(f: Field, e: ByteOrdering): State[BitVector, Unit] =
     if(e == ByteOrdering.BigEndian)
@@ -228,7 +228,7 @@ trait Marshal {
     }
   }
 
-  def decodeStructure(ts: List[Type], e: ByteOrdering): State[UnmarshalState, Field] =
+  def decodeStructure(ts: Seq[Type], e: ByteOrdering): State[UnmarshalState, Field] =
     for {
       v <- unmarshaler(ts.toVector, e)
     } yield FieldStructure(ts.toSignature_, v)

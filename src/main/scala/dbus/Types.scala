@@ -26,14 +26,14 @@ trait Types {
   case object TypeVariant       extends Type       { val code = "v"; val align = 1 }
   case class TypeArray(t: Type) extends Type       { val code = s"a${t.code}"; val align = 4 }
   case class TypeDictionary(k: AtomicType, v: Type) extends Type { val code = s"a{${k.code}${v.code}}"; val align = 4 }
-  case class TypeStructure(ts: List[Type]) extends Type { val code = ts map (_.code) mkString ("(", "", ")"); val align = 8 }
+  case class TypeStructure(ts: Seq[Type]) extends Type { val code = ts map (_.code) mkString ("(", "", ")"); val align = 8 }
 
   /* Represents a *valid* D-Bus type signature */
-  case class Signature(types: List[Type]) {
-    require(sumLength(types) <= 255, "Signature exceeds 255 bytes")
+  case class Signature(types: Seq[Type]) {
+    val sig = (types.foldLeft(new StringBuilder()){ (a, t) => a.append(t.code) }).toString
+    require(sig.length <= 255, s"Signature exceeds 255 characters: $sig")
 
-    override def toString() =
-      (types.foldLeft(new StringBuilder()){ (a, t) => a.append(t.code) }).toString
+    override def toString() = sig
   }
 
   case class ObjectPath(path: String) {
@@ -56,7 +56,7 @@ trait Types {
     require(isValidBusName(name), s"Invalid bus name string $name")
   }
 
-  implicit class SignatureListOps[T <: Type](val ts: List[T]) {
+  implicit class SignatureSeqOps[T <: Type](val ts: Seq[T]) {
     def toSignature: Throwable \/ Signature =
       \/.fromTryCatchNonFatal(Signature(ts))
 
@@ -112,7 +112,7 @@ trait Types {
       case _                    => 1
     }
 
-  def sumLength[T <: Type](ts: List[T]): Int = (ts map (typeLength)).sum
+  def sumLength[T <: Type](ts: Seq[T]): Int = (ts map (typeLength)).sum
 
   def typeDepth[T <: Type](t: T): Int =
     t match {
@@ -122,7 +122,7 @@ trait Types {
       case _                    => 1
     }
 
-  def maxDepth[T <: Type](ts: List[T]): Int =
+  def maxDepth[T <: Type](ts: Seq[T]): Int =
     ts.foldLeft(0){ (a, t) => Math.max(a, typeDepth(t)) }
 
   def parseSignature(s: String): Throwable \/ Signature =
