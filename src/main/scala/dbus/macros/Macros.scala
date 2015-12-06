@@ -50,7 +50,6 @@ object Macros extends MacrosCompat {
       }
     val decodeFields =
       (args zip Stream.from(0)) map { case ((n, t), i) =>
-        val fieldName = createTermName(c)(n)
         q"""implicitly[DBusCodec[$t]].decode(v($i))"""
       }
 

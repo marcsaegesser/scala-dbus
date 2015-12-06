@@ -9,7 +9,7 @@ scalacOptions in ThisBuild ++= Seq(
   "-Ywarn-value-discard",
   "-Ywarn-numeric-widen",
   "-Ywarn-dead-code",
-  "-Ymacro-debug-lite",
+  // "-Ymacro-debug-lite",
   "-Xlint",
   // "-Xfatal-warnings",
   "-unchecked",
