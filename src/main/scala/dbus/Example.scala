@@ -1,5 +1,6 @@
 package org.saegesser
 
+import scalaz._,Scalaz._
 import scala.util.control.NonFatal
 import com.typesafe.scalalogging._
 
@@ -32,14 +33,18 @@ case class Structure(i: Int, s: String)
 // object Structure {
 //   implicit val structureCodec = new DBusCodec[Structure] {
 //     import FieldOps._
-//     def encode(t: Structure): Field = {
-//       val fields = Vector(implicitly[DBusCodec[Int]].encode(t.i), implicitly[DBusCodec[String]].encode(t.s))
-//       FieldStructure(fields.toSignature_, fields)
+//     def encode(t: Structure): String \/ Field = {
+//       Vector(implicitly[DBusCodec[Int]].encode(t.i), implicitly[DBusCodec[String]].encode(t.s))
+//         .sequenceU
+//         .map(fs => FieldStructure(fs.toSignature_, fs))
 //     }
-//     def decode(f: Field): Structure =
+//     def decode(f: Field): String \/ Structure =
 //       f match {
-//         case FieldStructure(s, v) => Structure(implicitly[DBusCodec[Int]].decode(v(0)), implicitly[DBusCodec[String]].decode(v(1)))
-//         case _ => throw new Exception(s"Field $f is not a Structure")
+//         case FieldStructure(s, v) =>
+//           ((implicitly[DBusCodec[Int]].decode(v(0)).validation.toValidationNel |@|
+//             implicitly[DBusCodec[String]].decode(v(1)).validation.toValidationNel)
+//             { Structure.apply }).disjunction.leftMap(_.toString)
+//         case _ => s"Field $f is not a Structure".left
 //       }
 //   }
 // }
@@ -52,25 +57,6 @@ trait StructureTransform {
 class Transformer extends StructureTransform {
   def transform(s: Structure): Structure = Structure(s.i * 2, s.s.toUpperCase)
 }
-
-// class ExportedExample(underlying: Example) extends ExportedObject with StrictLogging {
-//   def interfaces = List(Interface("org.saegesser.Example", List(Method("echo", List(MethodArg("msg", TypeString, ArgIn)))), List(), List()))
-
-//   def invoke(method: MemberName, args: Vector[Field]): Reply =
-//     method match {
-//       case MemberName("echo") => invoke_echo(args)
-//       case _                  => ReplyError("org.freedesktop.dbus.Error", Vector(FieldString(s"Unknown method $method")))
-//     }
-
-//   def invoke_echo(args: Vector[Field]): Reply = {
-//     try {
-//       val result = underlying.echo(args(0).asString)
-//       ReplyReturn(Vector(FieldString(result)))
-//     } catch {
-//       case NonFatal(t) => ReplyError(t.getClass.toString, Vector(FieldString(t.getMessage)))
-//     }
-//   }
-// }
 
 // object Example {
 //   implicit def ExampleExporter(underlying: Example): ExportedObject =
@@ -92,12 +78,14 @@ class Transformer extends StructureTransform {
 //         }
 //       }
 
+//       // def liftedEcho = Applicative[\/[String,?]].lift(underlying.echo _)
+//       def liftedEcho = Applicative[({type E[A] = \/[String,A]})#E].lift(underlying.echo _)
+
 //       def invoke_echo(args: collection.Seq[Field]): Reply = {
 //         try {
-//           // val result = underlying.echo(args(0).asString)
-//           // ReplyReturn(Vector(FieldString(result)))
-//           val result = underlying.echo(implicitly[DBusCodec[String]].decode(args(0)))
-//           ReplyReturn(Vector(implicitly[DBusCodec[String]].encode(result)))
+//           liftedEcho(implicitly[DBusCodec[String]].decode(args(0)))
+//             .flatMap{ r: String => implicitly[DBusCodec[String]].encode(r) }
+//             .fold (e => ReplyError("InternalError", Vector(FieldString(e))), r => ReplyReturn(Vector(r)))
 //         } catch {
 //           case NonFatal(t) => ReplyError(t.getClass.getName, Vector(FieldString(t.getMessage)))
 //         }

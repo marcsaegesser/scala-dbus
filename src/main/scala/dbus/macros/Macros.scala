@@ -5,14 +5,23 @@ import dbus._,DBus._
 
 object Macros extends MacrosCompat {
 
-  def materializeDBusExportImpl[T: c.WeakTypeTag](c: Context): c.Expr[T => dbus.ExportedObject] = {
+  def fubar[T: c.WeakTypeTag](c: Context): c.Expr[Option[T]] = {
+    import c.universe._
+
+    val tpe = weakTypeOf[T]
+    val expr = q"""(Option(1) |@| Option("One"))((${createTermName(c)(tpe.toString)}).apply)"""
+
+    c.Expr[Option[T]]{expr}
+  }
+
+    def materializeDBusExportImpl[T: c.WeakTypeTag](c: Context): c.Expr[T => dbus.ExportedObject] = {
     import c.universe._
 
     val tpe = weakTypeOf[T]
     val dbusIfaces = encodeDBusInterfaces(c)(tpe)
     val invokers = encodeInvokers(c)(tpe)
     val expr =
-      (dbusIfaces |@| invokers) { case (is, (ivs, ivms)) =>
+      (dbusIfaces |@| invokers) { case (is, (ivs, ls, ivms)) =>
         // val ifaces = q"""List(..$is) """
         val exported =
           q"""(underlying: $tpe) => new ExportedObject {
@@ -22,6 +31,9 @@ object Macros extends MacrosCompat {
             val invokers = Map[MemberName, List[Invoker]](
               ..$ivs
             )
+
+            ..$ls
+
             def invoke(method: MemberName, interface: Option[InterfaceName], args: collection.Seq[Field]): Reply = {
               val is = invokers getOrElse(method, List.empty[Invoker]) filter { i => interface.isEmpty || interface.contains(i.interface) }
               is match {
@@ -49,30 +61,45 @@ object Macros extends MacrosCompat {
         q"""implicitly[DBusCodec[$t]].encode(t.$fieldName)"""
       }
     val decodeFields =
-      (args zip Stream.from(0)) map { case ((n, t), i) =>
-        q"""implicitly[DBusCodec[$t]].decode(v($i))"""
+      (args zip Stream.from(0))
+        .map { case ((n, t), i) => q"""implicitly[DBusCodec[$t]].decode(v($i)).validation.toValidationNel""" }
+        .map { _.asInstanceOf[Tree] }
+        .reduce { (a, b) => q"""$a |@| $b""" }
+
+    val ctorArgs =
+      args map { case (n, t) =>
+        val name = createTermName(c)(n)
+        q"$name : $t"
       }
+
+    val ctorParams = args map { case (n, _) =>
+      val name = createTermName(c)(n)
+      q"$name"
+    }
 
     val expr =
       q"""new DBusCodec[$tpe] {
         import FieldOps._
-        def encode(t: $tpe): Field = {
-          val fields = Vector(..$encodeFields)
-          FieldStructure(fields.toSignature_, fields)
+        def encode(t: $tpe): String \/ Field = {
+          Vector(..$encodeFields)
+            .sequenceU
+            .map(fs => FieldStructure(fs.toSignature_, fs))
         }
-        def decode(f: Field): $tpe =
+        def decode(f: Field): String \/ $tpe =
           f match {
-            case FieldStructure(s, v) => new $tpe(..$decodeFields)
-            case _ => throw new Exception(s"field $$f is not a Structure")
+            case FieldStructure(s, v) =>
+              ($decodeFields((..$ctorArgs) => new $tpe(..$ctorParams))).disjunction.leftMap(_.toString)
+            case _ => s"Field $$f is not a Structure".left
           }
       } """
     c.Expr[DBusCodec[T]]{expr}
   }
 
-  def encodeInvokers(c: Context)(tpe: c.universe.Type): ValidationNel[String, (List[c.universe.Tree], List[c.universe.Tree])] = {
+  def encodeInvokers(c: Context)(tpe: c.universe.Type): ValidationNel[String, (List[c.universe.Tree], List[c.universe.Tree], List[c.universe.Tree])] = {
     import c.universe._
     def isNormalMethod(m: MethodSymbol): Boolean = m.isPublic && m.paramLists.length == 1 && !m.isConstructor && !m.isSetter
     def invokeMethodName(iface: String, name: TermName): String = s"${iface.replace('.', '_')}_${name.decodedName}"
+    def liftedMethodName(iface: String, name: TermName): String = s"${iface.replace('.', '_')}_lifted_${name.decodedName}"
 
     val methods =
       tpe.baseClasses
@@ -83,21 +110,32 @@ object Macros extends MacrosCompat {
           ms map { m => (fullName, m) }
         }
 
+    val liftedMethods = methods
+      .map { case (i, m) =>
+        val methodName = createTermName(c)(m.name.decodedName.toString)
+        val liftedMethod = createTermName(c)(liftedMethodName(i, m.name))
+        q"""def $liftedMethod = Applicative[({type E[A] = \/[String,A]})#E].lift(underlying.$methodName _)"""
+      }.successNel[String]
+
     val invokeMethods = methods
       .map { case (i, m) =>
         val invokeMethod = createTermName(c)(invokeMethodName(i, m.name))
+        val liftedMethod = createTermName(c)(liftedMethodName(i, m.name))
         val methodName = createTermName(c)(m.name.decodedName.toString)
         val returnType = m.returnType
         val params = m.paramLists.flatten zip Stream.from(0)
-        val args = params.map { case (a, n) =>
-          val tpe = a.info
-          (q"""implicitly[DBusCodec[$tpe]].decode(args($n))""").successNel[String]
-        }.sequenceU
+        val args =
+          params.map { case (a, n) =>
+            val tpe = a.info
+            (q"""implicitly[DBusCodec[$tpe]].decode(args($n))""").successNel[String]
+          }.sequenceU
+
         args.map { aa =>
           q"""def $invokeMethod(args: collection.Seq[Field]): Reply =
                 try {
-                  val result = underlying.$methodName(..$aa)
-                  ReplyReturn(Vector(implicitly[DBusCodec[$returnType]].encode(result)))
+                  $liftedMethod(..$aa)
+                    .flatMap { r => implicitly[DBusCodec[$returnType]].encode(r) }
+                    .fold(e => ReplyError("InternalError", Vector(FieldString(e))), r => ReplyReturn(Vector(r)))
                 } catch {
                   case util.control.NonFatal(t) => ReplyError(t.getClass.getName, Vector(FieldString(t.getMessage)))
                 }
@@ -119,7 +157,7 @@ object Macros extends MacrosCompat {
         q"""MemberName($methodName) -> List(..$invkrs)"""
       }.successNel[String]
 
-    (invokers |@| invokeMethods)((_, _))
+    (invokers |@| liftedMethods |@| invokeMethods)((_, _ , _))
   }
 
   def isDBusInterface(c: Context)(iface: c.universe.Symbol): Boolean = iface.annotations exists (_.tree.tpe =:= c.universe.typeOf[dbus.DBus.DBusInterface])

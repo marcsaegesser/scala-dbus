@@ -10,6 +10,9 @@ object DBusCodecSpecification extends Properties("DBusCodec") {
   import Gen._
   import DBus._
 
+  case class TestExample(i: Int, s: String)
+  implicit def TestExampleCodec = DBusCodec.derive[TestExample]
+
   val genAtomic = oneOf("b", "y", "q", "u", "t", "n", "i", "x", "d", "h", "s", "g", "o")
   val genSig = nonEmptyListOf(genAtomic) suchThat (_.length <= 255) map (_.mkString.toSignature_)
   implicit def arbSig: Arbitrary[Signature] = Arbitrary { genSig }
@@ -31,3 +34,9 @@ object DBusCodecSpecification extends Properties("DBusCodec") {
   property("roundTrip Signature") = roundTrip[Signature]
   property("roundTrip ObjectPath") = roundTrip[ObjectPath]
 }
+
+// object Asdf {
+//   import DBus._
+//   case class TestExample(i: Int, s: String)
+//   implicit def TestExampleCodec = DBusCodec.derive[TestExample]
+// }

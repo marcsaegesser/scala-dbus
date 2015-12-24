@@ -60,6 +60,8 @@ libraryDependencies := {
   }
 }
 
+addCompilerPlugin("org.spire-math" % "kind-projector" % "0.6.3" cross CrossVersion.binary)
+
 unmanagedJars in Compile <++= baseDirectory map { base =>
   (base ** "*.jar").classpath
 }
