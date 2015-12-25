@@ -11,7 +11,13 @@ object DBusCodecSpecification extends Properties("DBusCodec") {
   import DBus._
 
   case class TestExample(i: Int, s: String)
-  implicit def TestExampleCodec = DBusCodec.derive[TestExample]
+  implicit val  TestExampleCodec = DBusCodec.derive[TestExample]
+  val genTestExample =
+    for {
+      i <- arbitrary[Int]
+      s <- arbitrary[String]
+    } yield TestExample(i, s)
+  implicit def arbTestExample: Arbitrary[TestExample] = Arbitrary { genTestExample }
 
   val genAtomic = oneOf("b", "y", "q", "u", "t", "n", "i", "x", "d", "h", "s", "g", "o")
   val genSig = nonEmptyListOf(genAtomic) suchThat (_.length <= 255) map (_.mkString.toSignature_)
@@ -22,7 +28,7 @@ object DBusCodecSpecification extends Properties("DBusCodec") {
   implicit val arbObjPath: Arbitrary[ObjectPath] = Arbitrary { genObjectPath }
 
   def roundTrip[A: Arbitrary](implicit codec: DBusCodec[A]) =
-    forAll { a: A => codec.decode(codec.encode(a)) == a }
+    forAll { a: A => (codec.encode(a) flatMap { codec.decode(_) }) == a.right }
 
   property("roundTrip Boolean") = roundTrip[Boolean]
   property("roundTrip Byte") = roundTrip[Byte]
@@ -33,10 +39,5 @@ object DBusCodecSpecification extends Properties("DBusCodec") {
   property("roundTrip String") = roundTrip[String]
   property("roundTrip Signature") = roundTrip[Signature]
   property("roundTrip ObjectPath") = roundTrip[ObjectPath]
+  property("roundTrip Structure") = roundTrip[TestExample]
 }
-
-// object Asdf {
-//   import DBus._
-//   case class TestExample(i: Int, s: String)
-//   implicit def TestExampleCodec = DBusCodec.derive[TestExample]
-// }

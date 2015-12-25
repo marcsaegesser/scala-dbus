@@ -23,7 +23,7 @@ trait DBusCodecs {
       }
   }
 
-  implicit val debusByteCodec = new DBusCodec[Byte] {
+  implicit val dbusByteCodec = new DBusCodec[Byte] {
     def encode(t: Byte): String \/ Field = FieldWord8(t).right
     def decode(f: Field): String \/ Byte =
       f match {
