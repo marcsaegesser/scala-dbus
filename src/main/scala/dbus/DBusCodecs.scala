@@ -9,7 +9,6 @@ trait DBusCodec[T] {
 }
 
 object DBusCodec {
-  def fubar[T]: Option[T] = macro macros.Macros.fubar[T]
   def derive[T]: DBusCodec[T] = macro macros.Macros.materializeDBusCodecImpl[T]
 }
 

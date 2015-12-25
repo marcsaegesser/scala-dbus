@@ -5,16 +5,7 @@ import dbus._,DBus._
 
 object Macros extends MacrosCompat {
 
-  def fubar[T: c.WeakTypeTag](c: Context): c.Expr[Option[T]] = {
-    import c.universe._
-
-    val tpe = weakTypeOf[T]
-    val expr = q"""(Option(1) |@| Option("One"))((${createTermName(c)(tpe.toString)}).apply)"""
-
-    c.Expr[Option[T]]{expr}
-  }
-
-    def materializeDBusExportImpl[T: c.WeakTypeTag](c: Context): c.Expr[T => dbus.ExportedObject] = {
+  def materializeDBusExportImpl[T: c.WeakTypeTag](c: Context): c.Expr[T => dbus.ExportedObject] = {
     import c.universe._
 
     val tpe = weakTypeOf[T]
@@ -22,7 +13,6 @@ object Macros extends MacrosCompat {
     val invokers = encodeInvokers(c)(tpe)
     val expr =
       (dbusIfaces |@| invokers) { case (is, (ivs, ls, ivms)) =>
-        // val ifaces = q"""List(..$is) """
         val exported =
           q"""(underlying: $tpe) => new ExportedObject {
             def interfaces: List[Interface] = List(..$is)
