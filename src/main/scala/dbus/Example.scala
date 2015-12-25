@@ -20,6 +20,15 @@ class Example extends Echo with StrictLogging {
 }
 
 @DBusInterface
+trait RandomInt {
+  def nextInt(): Int
+}
+
+class Rand extends RandomInt {
+  def nextInt(): Int = util.Random.nextInt()
+}
+
+@DBusInterface
 trait Fubar {
   val m: Map[Int, String]
 }
@@ -29,6 +38,15 @@ class AFubar extends Fubar {
 }
 
 case class Structure(i: Int, s: String)
+
+@DBusInterface
+trait CreateStructure {
+  def newStructure(i: Int, s: String): Structure
+}
+
+class StructureFactor extends CreateStructure {
+  def newStructure(i: Int, s: String): Structure = Structure(i, s)
+}
 
 // object Structure {
 //   implicit val structureCodec = new DBusCodec[Structure] {

@@ -114,7 +114,11 @@ object Macros extends MacrosCompat {
       .map { case (i, m) =>
         val methodName = createTermName(c)(m.name.decodedName.toString)
         val liftedMethod = createTermName(c)(liftedMethodName(i, m.name))
-        q"""def $liftedMethod = Applicative[({type E[A] = \/[String,A]})#E].lift(underlying.$methodName _)"""
+        getParameterLists(c)(m).flatten.size match {
+          case 0 => q"""def $liftedMethod = () => (underlying.$methodName).right[String]"""
+          case 1 => q"""def $liftedMethod = Applicative[({type E[A] = \/[String,A]})#E].${createTermName(c)("lift")}(underlying.$methodName _)"""
+          case n => q"""def $liftedMethod = Applicative[({type E[A] = \/[String,A]})#E].${createTermName(c)(s"lift$n")}(underlying.$methodName _)"""
+        }
       }.successNel[String]
 
     val invokeMethods = methods
