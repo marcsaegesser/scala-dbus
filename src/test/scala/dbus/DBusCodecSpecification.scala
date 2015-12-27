@@ -40,4 +40,6 @@ object DBusCodecSpecification extends Properties("DBusCodec") {
   property("roundTrip Signature") = roundTrip[Signature]
   property("roundTrip ObjectPath") = roundTrip[ObjectPath]
   property("roundTrip Structure") = roundTrip[TestExample]
+  property("roundTrip List[Int]") = roundTrip[List[Int]]
+  property("roundTrip List[TestExample]") = roundTrip[List[TestExample]]
 }

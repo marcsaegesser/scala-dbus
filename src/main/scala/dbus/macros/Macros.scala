@@ -44,6 +44,7 @@ object Macros extends MacrosCompat {
     import c.universe._
 
     val tpe = weakTypeOf[T]
+    val dbusTypeTree = type2DBusType(c)(tpe).map{dbusType2Tree(c)(_) }.fold(e => c.abort(c.enclosingPosition, e.toString), identity)
     val args = getConstructorArgs(c)(tpe)
     val encodeFields =
       args map { case (n, t) =>
@@ -70,6 +71,7 @@ object Macros extends MacrosCompat {
     val expr =
       q"""new DBusCodec[$tpe] {
         import FieldOps._
+        def dbusType: Type = $dbusTypeTree
         def encode(t: $tpe): String \/ Field = {
           Vector(..$encodeFields)
             .sequenceU

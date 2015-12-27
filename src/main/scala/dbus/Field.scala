@@ -105,8 +105,6 @@ trait Fields {
     override def asMap = v.toMap
   }
 
-  // type Message = Vector[Field]
-
   implicit class FieldSeqOps[F <: Field](val fs: Seq[F]) {
     def toFields: Vector[Field] = fs.toVector
   }

@@ -74,4 +74,6 @@ import DBus._
 import scodec.bits._
 """
 
+parallelExecution in Test := false
+
 lazy val dbus = project.in(file("."))
