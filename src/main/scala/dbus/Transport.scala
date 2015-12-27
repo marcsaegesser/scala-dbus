@@ -25,17 +25,15 @@ trait Transport extends StrictLogging {
     \/.fromTryCatchNonFatal {
       val buffer = new Array[Byte](512)
 
-      logger.debug("auth:  Sending AUTH EXTERNAL...")
+      // This is the bare minimum to get connected and
+      // authenticated on the session bus. This is only
+      // for quick and dirty testing. This MUST BE replaced.
+
       out.write("AUTH EXTERNAL\r\n".getBytes)
       val n = in.read(buffer)
-      logger.debug(s"auth:  Read ${new String(buffer, 0, n)}")
-      logger.debug(s"auth:  Writing DATA...")
       out.write("DATA\r\n".getBytes)
       val n1 = in.read(buffer)
-      logger.debug(s"auth:  Read ${new String(buffer, 0, n1)}")
-      logger.debug(s"auth:  Sending BEGIN")
       out.write("BEGIN\r\n".getBytes)
-      logger.debug(s"Auth complete. available=${in.available()}")
 
       true
     }
