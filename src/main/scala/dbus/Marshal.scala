@@ -136,7 +136,10 @@ trait Marshal {
     s traverseS (unmarshalField(_, e))
 
   def unmarshal(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Throwable \/ Vector[Field] =
-    \/.fromTryCatchNonFatal { unmarshaler(s.types.toVector, e) eval (UnmarshalState.empty(bits)) }
+    \/.fromTryCatchNonFatal { unmarshaler(s.types.toVector, e) run (UnmarshalState.empty(bits)) match {
+      case (UnmarshalState(b, _), v) if b.isEmpty => v
+      case _ => throw new Exception("Could not unmarshal all input data")
+    } }
 
   def unmarshal_(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Vector[Field] =
     unmarshal(s, bits, e) fold (throw _, identity)

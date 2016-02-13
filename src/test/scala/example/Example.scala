@@ -1,4 +1,4 @@
-package org.saegesser
+package example
 
 import scalaz._,Scalaz._
 import scala.util.control.NonFatal
