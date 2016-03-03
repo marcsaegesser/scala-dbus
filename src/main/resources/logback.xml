@@ -22,7 +22,7 @@
   <logger name="com.ami.iris.IrisDecoder" level="trace" />
   <logger name="scala.slick" level="warn" />
 
-  <root level="trace">
+  <root level="debug">
 	<appender-ref ref="rolling-file"/>
   </root>
 </configuration>

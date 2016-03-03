@@ -35,6 +35,8 @@ trait DBusMessageCodec extends StrictLogging {
   def decode(headerBits: BitVector, bodyBits: BitVector): Throwable \/ DBusMessage =
     for {
       s <- "yyyyuua(yv)".toSignature
+      _ = logger.trace(s"decode: headerBits=$headerBits")
+      _ = logger.trace(s"decode: bodyBits=$bodyBits")
       o <- determineByteOrder(headerBits)
       h <- unmarshal(s, headerBits, o)
       m <- decodeMessage(h, bodyBits)
@@ -90,8 +92,9 @@ trait DBusMessageCodec extends StrictLogging {
     val flags = headerFlagsL.get(header)
     val o = endiannessToByteOrdering(headerEndiannessL.get(header))
 
-    logger.debug(s"decodeMethodCall:  headerFields=$headerFields")
-    logger.debug(s"decodeMethodcall:  memberName = ${headerFields.get(HeaderMemberType.code)}")
+    logger.trace(s"decodeMethodCall:  headerFields=$headerFields")
+    logger.trace(s"decodeMethodCall:  memberName = ${headerFields.get(HeaderMemberType.code)}")
+    logger.trace(s"decodeMethodCall:  bodyBits=$bodyBits")
     MethodCall(
       headerFields.get(HeaderPathType.code).map(_.asObjectPath).getOrElse(throw new Exception("Method call missing Path")),
       headerFields.get(HeaderInterfaceType.code).flatMap(_.asString.toInterfaceName.toOption),

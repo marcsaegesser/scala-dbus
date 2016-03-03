@@ -14,39 +14,41 @@ trait Marshal {
   def messageSignature(m: Seq[Field]): Throwable \/ Signature = (m.map(_.t)).toList.toSignature
   def messageSignature_(m: Seq[Field]): Signature = (m.map(_.t)).toList.toSignature_
 
-  def marshalField(f: Field, e: ByteOrdering): State[BitVector, Unit] =
+  case class MarshalState(bits: BitVector, offset: Long)
+
+  def marshalField(f: Field, e: ByteOrdering): State[MarshalState, Unit] =
     for {
       _ <- pad(f.t.align)
       _ <- encodeField(f, e)
     } yield ()
 
-  private def marshaler[F[_]: Foldable](m: F[Field], e: ByteOrdering): State[BitVector, Unit] =
+  private def marshaler[F[_]: Foldable](m: F[Field], e: ByteOrdering): State[MarshalState, Unit] =
     (m traverseS_ (marshalField(_, e)))
 
-  def marshal[F[_]: Foldable](m: F[Field], e: ByteOrdering = ByteOrdering.BigEndian): Throwable \/ BitVector =
-    \/.fromTryCatchNonFatal { (marshaler(m, e) exec (BitVector.empty)) }
+  def marshal[F[_]: Foldable](m: F[Field], e: ByteOrdering = ByteOrdering.BigEndian, initial: BitVector = BitVector.empty, offset: Long = 0L): Throwable \/ BitVector =
+    \/.fromTryCatchNonFatal { (marshaler(m, e) exec (MarshalState(initial, offset))).map(_.bits) }
 
-  def marshal_[F[_]: Foldable](m: F[Field], e: ByteOrdering = ByteOrdering.BigEndian): BitVector =
-    marshal(m, e) fold (throw _, identity)
+  def marshal_[F[_]: Foldable](m: F[Field], e: ByteOrdering = ByteOrdering.BigEndian, initial: BitVector = BitVector.empty, offset: Long = 0L): BitVector =
+    marshal(m, e, initial, offset) fold (throw _, identity)
 
   import DBusSCodecs._
 
-  def encodeField(f: Field, e: ByteOrdering): State[BitVector, Unit] =
+  def encodeField(f: Field, e: ByteOrdering): State[MarshalState, Unit] =
     if(e == ByteOrdering.BigEndian)
       f match {
-        case FieldBoolean(v)       => State.modify { _ ++ (if(v) int32.encode(1) else int32.encode(0)).require }
-        case FieldWord8(v)         => State.modify { _ ++ byte.encode(v).require }
-        case FieldWord16(v)        => State.modify { _ ++ short(16).encode(v).require }
-        case FieldWord32(v)        => State.modify { _ ++ int32.encode(v).require }
-        case FieldWord64(v)        => State.modify { _ ++ int64.encode(v).require }
-        case FieldInt16(v)         => State.modify { _ ++ short(16).encode(v).require }
-        case FieldInt32(v)         => State.modify { _ ++ int32.encode(v).require }
-        case FieldInt64(v)         => State.modify { _ ++ int64.encode(v).require }
-        case FieldDouble(v)        => State.modify { _ ++ double.encode(v).require }
-        case FieldUnixFD(v)        => State.modify { _ ++ int32.encode(v).require }
-        case FieldString(v)        => State.modify { _ ++ dbusStringCodec.encode((v, ())).require }
-        case FieldObjectPath(v)    => State.modify { _ ++ dbusStringCodec.encode((v.path, ())).require }
-        case FieldSignature(v)     => State.modify { _ ++ dbusStringCodecSmall.encode((v.toString, ())).require }
+        case FieldBoolean(v)       => encodeBits((if(v) int32.encode(1) else int32.encode(0)).require, 4)
+        case FieldWord8(v)         => encodeBits(byte.encode(v).require, 1)
+        case FieldWord16(v)        => encodeBits(short(16).encode(v).require, 2)
+        case FieldWord32(v)        => encodeBits(int32.encode(v).require, 4)
+        case FieldWord64(v)        => encodeBits(int64.encode(v).require, 8)
+        case FieldInt16(v)         => encodeBits(short(16).encode(v).require, 2)
+        case FieldInt32(v)         => encodeBits(int32.encode(v).require, 4)
+        case FieldInt64(v)         => encodeBits(int64.encode(v).require, 8)
+        case FieldDouble(v)        => encodeBits(double.encode(v).require, 8)
+        case FieldUnixFD(v)        => encodeBits(int32.encode(v).require, 4)
+        case FieldString(v)        => encodeString(v, e)
+        case FieldObjectPath(v)    => encodeString(v.path, e)
+        case FieldSignature(v)     => encodeStringSmall(v.toString)
         case FieldArray(t, v)      => encodeArray(t, v, e)
         case FieldStructure(s, v)  => marshaler(v, e)
         case FieldVariant(v)       => encodeVariant(v, e)
@@ -54,43 +56,64 @@ trait Marshal {
       }
     else
       f match {
-        case FieldBoolean(v)       => State.modify { _ ++ (if(v) int32L.encode(1) else int32L.encode(0)).require }
-        case FieldWord8(v)         => State.modify { _ ++ byte.encode(v).require }
-        case FieldWord16(v)        => State.modify { _ ++ ushortL(16).encode(v).require }
-        case FieldWord32(v)        => State.modify { _ ++ int32L.encode(v).require }
-        case FieldWord64(v)        => State.modify { _ ++ int64L.encode(v).require }
-        case FieldInt16(v)         => State.modify { _ ++ shortL(16).encode(v).require }
-        case FieldInt32(v)         => State.modify { _ ++ int32L.encode(v).require }
-        case FieldInt64(v)         => State.modify { _ ++ int64L.encode(v).require }
-        case FieldDouble(v)        => State.modify { _ ++ doubleL.encode(v).require }
-        case FieldUnixFD(v)        => State.modify { _ ++ int32L.encode(v).require }
-        case FieldString(v)        => State.modify { _ ++ dbusStringCodecL.encode((v, ())).require }
-        case FieldObjectPath(v)    => State.modify { _ ++ dbusStringCodecL.encode((v.path, ())).require }
-        case FieldSignature(v)     => State.modify { _ ++ dbusStringCodecSmall.encode((v.toString, ())).require }
+        case FieldBoolean(v)       => encodeBits((if(v) int32L.encode(1) else int32L.encode(0)).require, 4)
+        case FieldWord8(v)         => encodeBits(byte.encode(v).require, 1)
+        case FieldWord16(v)        => encodeBits(ushortL(16).encode(v).require, 2)
+        case FieldWord32(v)        => encodeBits(int32L.encode(v).require, 4)
+        case FieldWord64(v)        => encodeBits(int64L.encode(v).require, 8)
+        case FieldInt16(v)         => encodeBits(shortL(16).encode(v).require, 2)
+        case FieldInt32(v)         => encodeBits(int32L.encode(v).require, 4)
+        case FieldInt64(v)         => encodeBits(int64L.encode(v).require, 8)
+        case FieldDouble(v)        => encodeBits(doubleL.encode(v).require, 8)
+        case FieldUnixFD(v)        => encodeBits(int32L.encode(v).require, 4)
+        case FieldString(v)        => encodeString(v, e)
+        case FieldObjectPath(v)    => encodeString(v.path, e)
+        case FieldSignature(v)     => encodeStringSmall(v.toString)
         case FieldArray(t, v)      => encodeArray(t, v, ByteOrdering.LittleEndian)
         case FieldStructure(s, v)  => marshaler(v, e)
         case FieldVariant(v)       => encodeVariant(v, e)
         case FieldDictionary(t, v) => encodeDictionary(t, v, e)
       }
 
-  def encodeArray(t: Type, v: Vector[Field], e: ByteOrdering): State[BitVector, Unit] = {
-    val arrayBits = marshal(v, e) getOrElse { throw new Exception("Error encoding array bits") }
-    val size = arrayBits.size / 8
-    require(size <= 67108864, s"Array size of $size bytes to large")
+  def encodeBits(b: BitVector, size: Long): State[MarshalState, Unit] =
+    State.modify { s => MarshalState(s.bits ++ b, s.offset + size) }
+
+  def encodeString(s: String, e: ByteOrdering): State[MarshalState, Unit] = {
+    val stringBits =
+      if(e == ByteOrdering.BigEndian)
+        dbusStringCodec.encode((s, ())).require
+      else
+        dbusStringCodecL.encode((s, ())).require
+
+    encodeBits(stringBits, stringBits.size / 8)
+  }
+
+  def encodeStringSmall(s: String): State[MarshalState, Unit] = {
+    val stringBits = dbusStringCodecSmall.encode((s, ())).require
+    encodeBits(stringBits, stringBits.size / 8)
+  }
+
+  def encodeArray(t: Type, v: Vector[Field], e: ByteOrdering): State[MarshalState, Unit] = {
     for {
+      _ <- pad(TypeArray(t).align) // Pad to array count
+      s <- get[MarshalState]
+      o = s.offset + TypeInt32.align
+      arrayBits = marshal(v, e, BitVector.empty, o + padding(o, t.align)) getOrElse { throw new Exception("Error encoding array bits") }
+      size = arrayBits.size / 8
+      _ = require(size <= 67108864, s"Array size of $size bytes to large")
       _ <- marshalField(FieldInt32(size.toInt), e)
-      _ <- pad(t.align)
-      _ <- modify[BitVector](_ ++ arrayBits)
+      _ <- pad(t.align) // Pad to first element (NOTE: not included in size)
+      _ <- encodeBits(arrayBits, size)
     } yield ()
   }
 
-  def encodeDictionary(t: TypeDictionary, v: Vector[(Field, Field)], e: ByteOrdering): State[BitVector, Unit] = {
+  def encodeDictionary(t: TypeDictionary, v: Vector[(Field, Field)], e: ByteOrdering): State[MarshalState, Unit] = {
     val s = List(t.k, t.v)
     val elements = v map { case (k, v) => FieldStructure(s.toSignature_, Vector(k, v))}
     encodeArray(TypeStructure(s), elements, e)
   }
 
-  def encodeVariant(v: Field, e: ByteOrdering): State[BitVector, Unit] =
+  def encodeVariant(v: Field, e: ByteOrdering): State[MarshalState, Unit] =
     for {
       _ <- marshalField(FieldSignature(v.t.code.toSignature_), e)
       _ <- marshalField(v, e)
@@ -106,11 +129,13 @@ trait Marshal {
     result
   }
 
-  def pad(align: Int): State[BitVector, Unit] =
+  def pad(align: Int): State[MarshalState, Unit] =
     for {
-      v <- get[BitVector]
-      b = BitVector.fill(padding(v.size / 8, align)*8)(false)
-      _ <- put(v ++ b)
+      s <- get[MarshalState]
+      pad = padding(s.offset, align)
+      // _ = println(s"pad: align=$align, offset=${s.offset}, pad=$pad")
+      b = BitVector.fill(pad*8)(false)
+      _ <- put(s.copy(s.bits ++ b, s.offset + pad))
     } yield ()
 
   case class UnmarshalState(bits: BitVector, offset: Int)
@@ -218,6 +243,7 @@ trait Marshal {
     def beforeOffset(o: Long): State[UnmarshalState, Boolean] = State { s => (s, s.offset < o)}
     for {
       f <- decodeField(TypeInt32, e)
+      _ <- skipPad(t.align)
       s <- get[UnmarshalState]
       v <- unmarshalField(t, e).whileM[Vector](beforeOffset( s.offset + f.asInt.toLong))
     } yield FieldArray(t, v)
@@ -240,6 +266,8 @@ trait Marshal {
     def readType: State[UnmarshalState, Type] =
       for {
         s <- decodeField(TypeSignature, e)
+        st <- get[UnmarshalState]
+        // _ = println(s"readType: s=$s, st=$st")
       } yield (s.asSignature.types.head)
 
     for {
