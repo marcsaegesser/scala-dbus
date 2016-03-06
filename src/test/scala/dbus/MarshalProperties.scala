@@ -24,14 +24,18 @@ object DBusMarshalSpecification extends Properties("Marshal") {
   val genFieldUnixFD:  Gen[FieldUnixFD]  = arbitrary[Int]     map (FieldUnixFD)
 
   val alphaNumStr = nonEmptyListOf(alphaNumChar) map (_.mkString)
-  // val genObjectPath = listOf(alphaNumStr) map (_.mkString("/", "/", "").toObjectPath_)
-  val genObjectPath = listOf(identifier) map (_.mkString("/", "/", "").toObjectPath_)
+  val genObjectPath = listOf(alphaNumStr) map (_.mkString("/", "/", "").toObjectPath_)
   val genFieldObjectPath = genObjectPath map (FieldObjectPath)
 
   // NOTE: We don't really care about the contents of the signature
   val genAtomic = oneOf("b", "y", "q", "u", "t", "n", "i", "x", "d", "h", "s", "g", "o")
   val genSig = nonEmptyListOf(genAtomic) suchThat (_.length <= 255) map (_.mkString.toSignature_)
   val genFieldSignature: Gen[FieldSignature] = genSig map (FieldSignature)
+
+  val genAtomicType = oneOf(
+    TypeBoolean, TypeWord8, TypeWord16, TypeWord32, TypeWord64, TypeInt16, TypeInt32,
+    TypeInt64, TypeDouble, TypeString, TypeUnixFD, TypeObjectPath, TypeSignature
+  )
 
   val genListField: Gen[Field] = oneOf(
     listOf(genFieldBoolean) map (l => FieldArray(TypeBoolean, l.toVector)),
@@ -50,6 +54,25 @@ object DBusMarshalSpecification extends Properties("Marshal") {
     listOf(genVariant) map (l => FieldArray(TypeVariant, l.toVector))
   )
 
+  val atomicGeneratorMap: Map[AtomicType, Gen[AtomicField]] =
+    Map(
+      TypeBoolean -> genFieldBoolean, TypeWord8 -> genFieldWord8, TypeWord16 -> genFieldWord16,
+      TypeWord32 -> genFieldWord32, TypeWord64 -> genFieldWord64, TypeInt16 -> genFieldInt16,
+      TypeInt32 -> genFieldInt32, TypeInt64 -> genFieldInt64, TypeDouble -> genFieldDouble,
+      TypeString -> genFieldString, TypeUnixFD -> genFieldUnixFD, TypeObjectPath -> genFieldObjectPath,
+      TypeSignature -> genFieldSignature
+    )
+
+  val genAtomicFieldGen: Gen[(AtomicType, Gen[AtomicField])] =
+    genAtomicType flatMap { t => (t, atomicGeneratorMap(t)) }
+
+  val genListOfAtomicFields: Gen[(AtomicType, List[AtomicField])] =
+    for {
+      (t, g) <- genAtomicFieldGen
+      l <- listOf(g)
+    } yield (t, l)
+
+
   val genField: Gen[Field] = frequency(
     (10, genFieldBoolean),
     (10, genFieldWord8),
@@ -66,11 +89,19 @@ object DBusMarshalSpecification extends Properties("Marshal") {
     (10, genFieldSignature),
     (10, genVariant),
     (1,  genListField),
-    (1,  genStructure)
+    (1,  genStructure),
+    (1,  genDictionary)
   )
 
   def genVariant: Gen[FieldVariant] = lzy(genField map (FieldVariant))
   def genStructure: Gen[FieldStructure] = lzy(genMessage map (m => FieldStructure(messageSignature_(m), m)))
+
+  def genDictionary: Gen[FieldDictionary] = lzy(
+    for {
+      (kt, ks) <- genListOfAtomicFields
+      (vt, vs) <- genListOfAtomicFields
+    } yield FieldDictionary(TypeDictionary(kt, vt), ks.toVector zip vs.toVector)
+  )
 
   def genMessage: Gen[Vector[Field]] = lzy(nonEmptyContainerOf[Vector, Field](genField) suchThat(m => messageSignature(m).isRight))
   implicit lazy val arbMessage = Arbitrary(genMessage)

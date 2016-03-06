@@ -10,6 +10,8 @@ import dbus._,DBus._
 trait Echo {
   var prefix: String = "Echo:  "
   def echo(msg: String): String
+  def echoes(msgs: List[String]): List[String]
+  def double(ds: List[Long]): List[Long]
 }
 
 class Example extends Echo with StrictLogging {
@@ -17,6 +19,13 @@ class Example extends Echo with StrictLogging {
     logger.debug(s"echo:  IN - msg=$msg")
     s"$prefix$msg"
   }
+
+  def echoes(msgs: List[String]) = {
+    logger.debug(s"echoes:  IN - msgs=$msgs")
+    msgs map {s => s"$prefix$s"}
+  }
+
+  def double(ds: List[Long]): List[Long] = ds map (_*2)
 }
 
 @DBusInterface
