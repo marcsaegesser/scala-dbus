@@ -11,8 +11,8 @@ import scodec.bits.{ ByteVector, BitVector, ByteOrdering }
 import DBus._
 
 trait Marshal {
-  def messageSignature(m: Seq[Field]): Throwable \/ Signature = (m.map(_.t)).toList.toSignature
-  def messageSignature_(m: Seq[Field]): Signature = (m.map(_.t)).toList.toSignature_
+  def messageSignature(m: Seq[Field]): Throwable \/ Signature = (m.map(_.t)).toSignature
+  def messageSignature_(m: Seq[Field]): Signature = (m.map(_.t)).toSignature_
 
   case class MarshalState(bits: BitVector, offset: Long)
 
