@@ -59,7 +59,7 @@ trait Message {
     body: Vector[Field]
   ) extends DBusMessage {
     val msgType = MethodCallType
-    val flags = List(if(replyExpected) none else NoReplyExpected.some, if(autoStart) none else NoAutoStart.some) filter (_.isDefined) map (_.get)
+    val flags = List(if(replyExpected) none else NoReplyExpected.some, if(autoStart) none else NoAutoStart.some) filter (_.isDefined) map (_.get)  //DEMO: Duh, List[Option[_]].filter(_.isDefined).map(_.get) is just flatten
     val headers = List(HeaderPath(path).some, HeaderMember(member).some, messageSignature(body).toOption map (HeaderSignature(_)), interface map (HeaderInterface(_)), sender map (HeaderSender(_)), destination map (HeaderDestination(_))) filter (_.isDefined) map (_.get)
   }
 
