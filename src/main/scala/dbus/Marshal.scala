@@ -11,8 +11,8 @@ import scodec.bits.{ ByteVector, BitVector, ByteOrdering }
 import DBus._
 
 trait Marshal {
-  def messageSignature(m: Seq[Field]): Throwable \/ Signature = (m.map(_.t)).toSignature
-  def messageSignature_(m: Seq[Field]): Signature = (m.map(_.t)).toSignature_
+  def messageSignature(m: Seq[Field]): Throwable \/ Signature = (m.map(_.t)).toSignature  //DEMO: The underscore font indicates an implicit conversion or implicit parameter
+  def messageSignature_(m: Seq[Field]): Signature = (m.map(_.t)).toSignature_             //DEMO: Tooltips will show info about implicit usage. Also C-c C-v e will show implicit info in the echo area
 
   case class MarshalState(bits: BitVector, offset: Long)
 
