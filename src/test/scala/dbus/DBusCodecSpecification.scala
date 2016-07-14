@@ -4,7 +4,6 @@ import scalaz._,Scalaz._
 import org.scalacheck._
 import org.scalacheck.Arbitrary._
 import org.scalacheck.Prop._
-import dbus._
 
 object DBusCodecSpecification extends Properties("DBusCodec") {
   import Gen._
