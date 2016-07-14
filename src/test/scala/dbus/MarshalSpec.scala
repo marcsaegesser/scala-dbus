@@ -6,7 +6,7 @@ import org.scalacheck._
 import org.scalacheck.Prop.forAll
 import org.scalacheck.Prop.BooleanOperators
 
-object DBusMarshalSpecification extends Properties("Marshal") {
+object MarshalSpec extends Properties("Marshal") {
   import Gen._
   import DBus._
   import Arbitrary.arbitrary
