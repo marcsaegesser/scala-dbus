@@ -1,6 +1,6 @@
 package dbus
 
-//DEMO:  Notice Semantic highlighting
+//DEMO:  Note Semantic highlighting
 trait DBus
     extends dbus.Types   //DEMO: References to Traits are italicised
     with dbus.Fields     //DEMO: Use M-. to jump to the definition of a type

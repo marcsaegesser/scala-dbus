@@ -3,7 +3,7 @@ package dbus
 import org.scalacheck._
 import org.scalacheck.Prop.forAll
 
-object TypeSpec extends Properties("Types") {
+object TypesSpec extends Properties("Types") {
   import Gen._
   import DBus._
 
