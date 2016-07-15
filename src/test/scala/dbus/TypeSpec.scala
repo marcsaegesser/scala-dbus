@@ -2,9 +2,8 @@ package dbus
 
 import org.scalacheck._
 import org.scalacheck.Prop.forAll
-import dbus._
 
-object DBusTypeSpecification extends Properties("Types") {
+object TypeSpec extends Properties("Types") {
   import Gen._
   import DBus._
 
