@@ -11,28 +11,55 @@ import scodec.bits.{ ByteVector, BitVector, ByteOrdering }
 import DBus._
 
 trait Marshal {
-  def messageSignature(m: Seq[Field]): Throwable \/ Signature = (m.map(_.t)).toSignature  //DEMO: The underscore font indicates an implicit conversion or implicit parameter
-  def messageSignature_(m: Seq[Field]): Signature = (m.map(_.t)).toSignature_             //DEMO: Tooltips will show info about implicit usage. Also C-c C-v e will show implicit info in the echo area
+  /** Marshal a message into a BitVector.
+    *
+    */
+  def marshal[F[_]: Foldable](m: F[Field], e: ByteOrdering = ByteOrdering.BigEndian, initial: BitVector = BitVector.empty, offset: Long = 0L): Throwable \/ BitVector =
+    \/.fromTryCatchNonFatal { (marshaler(m, e) exec (MarshalState(initial, offset))).map(_.bits) }
 
+
+  /** Marshal a message into a BitVector throwing an exception on failure.
+    *
+    */
+  def marshal_[F[_]: Foldable](m: F[Field], e: ByteOrdering = ByteOrdering.BigEndian, initial: BitVector = BitVector.empty, offset: Long = 0L): BitVector =
+    marshal(m, e, initial, offset) fold (throw _, identity)
+
+  /** Unmarshal a BitVector to a Vector[Field] given the message signature.
+    *
+    */
+  def unmarshal(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Throwable \/ Vector[Field] =
+    \/.fromTryCatchNonFatal { unmarshaler(s.types.toVector, e) run (UnmarshalState.empty(bits)) match {
+      case (UnmarshalState(b, _), v) if b.isEmpty => v
+      case _ => throw new Exception("Could not unmarshal all input data")
+    } }
+
+  /** Unmarshal a BitVector to a Vector[Field] given the message signature, Throws an exception on failure.
+    *
+    */
+  def unmarshal_(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Vector[Field] =
+    unmarshal(s, bits, e) fold (throw _, identity)
+
+
+  private
   case class MarshalState(bits: BitVector, offset: Long)
 
+  private
   def marshalField(f: Field, e: ByteOrdering): State[MarshalState, Unit] =
     for {
       _ <- pad(f.t.align)
       _ <- encodeField(f, e)
     } yield ()
 
-  private def marshaler[F[_]: Foldable](m: F[Field], e: ByteOrdering): State[MarshalState, Unit] =
+
+  private
+  def marshaler[F[_]: Foldable](m: F[Field], e: ByteOrdering): State[MarshalState, Unit] =
     (m traverseS_ (marshalField(_, e)))
 
-  def marshal[F[_]: Foldable](m: F[Field], e: ByteOrdering = ByteOrdering.BigEndian, initial: BitVector = BitVector.empty, offset: Long = 0L): Throwable \/ BitVector =
-    \/.fromTryCatchNonFatal { (marshaler(m, e) exec (MarshalState(initial, offset))).map(_.bits) }
 
-  def marshal_[F[_]: Foldable](m: F[Field], e: ByteOrdering = ByteOrdering.BigEndian, initial: BitVector = BitVector.empty, offset: Long = 0L): BitVector =
-    marshal(m, e, initial, offset) fold (throw _, identity)
 
   import DBusSCodecs._
 
+  private
   def encodeField(f: Field, e: ByteOrdering): State[MarshalState, Unit] =
     if(e == ByteOrdering.BigEndian)
       f match {
@@ -75,9 +102,11 @@ trait Marshal {
         case FieldDictionary(t, v) => encodeDictionary(t, v, e)
       }
 
+  private
   def encodeBits(b: BitVector, size: Long): State[MarshalState, Unit] =
     State.modify { s => MarshalState(s.bits ++ b, s.offset + size) }
 
+  private
   def encodeString(s: String, e: ByteOrdering): State[MarshalState, Unit] = {
     val stringBits =
       if(e == ByteOrdering.BigEndian)
@@ -88,11 +117,13 @@ trait Marshal {
     encodeBits(stringBits, stringBits.size / 8)
   }
 
+  private
   def encodeStringSmall(s: String): State[MarshalState, Unit] = {
     val stringBits = dbusStringCodecSmall.encode((s, ())).require
     encodeBits(stringBits, stringBits.size / 8)
   }
 
+  private
   def encodeArray(t: Type, v: Vector[Field], e: ByteOrdering): State[MarshalState, Unit] = {
     for {
       _ <- pad(TypeArray(t).align) // Pad to array count
@@ -107,12 +138,14 @@ trait Marshal {
     } yield ()
   }
 
+  private
   def encodeDictionary(t: TypeDictionary, v: Vector[(Field, Field)], e: ByteOrdering): State[MarshalState, Unit] = {
     val s = List(t.k, t.v)
     val elements = v map { case (k, v) => FieldStructure(s.toSignature_, Vector(k, v))}
     encodeArray(TypeStructure(s), elements, e)
   }
 
+  private
   def encodeVariant(v: Field, e: ByteOrdering): State[MarshalState, Unit] =
     for {
       _ <- marshalField(FieldSignature(v.t.code.toSignature_), e)
@@ -129,6 +162,7 @@ trait Marshal {
     result
   }
 
+  private
   def pad(align: Int): State[MarshalState, Unit] =
     for {
       s <- get[MarshalState]
@@ -138,11 +172,12 @@ trait Marshal {
       _ <- put(s.copy(s.bits ++ b, s.offset + pad))
     } yield ()
 
-  case class UnmarshalState(bits: BitVector, offset: Int)
-  object UnmarshalState {
+  private case class UnmarshalState(bits: BitVector, offset: Int)
+  private object UnmarshalState {
     def empty(bits: BitVector) = UnmarshalState(bits, 0)
   }
 
+  private
   def skipPad(align: Int): State[UnmarshalState, Unit] =
     for {
       s <- get[UnmarshalState]
@@ -151,24 +186,18 @@ trait Marshal {
       _ <- put(s.copy(offset = s.offset + p.toInt, bits = b))
     } yield ()
 
+  private
   def unmarshalField(t: Type, e: ByteOrdering): State[UnmarshalState, Field] =
     for {
       _ <- skipPad(t.align)
       f <- decodeField(t, e)
     } yield f
 
+  private
   def unmarshaler(s: Vector[Type], e: ByteOrdering): State[UnmarshalState, Vector[Field]] =
     s traverseS (unmarshalField(_, e))
 
-  def unmarshal(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Throwable \/ Vector[Field] =
-    \/.fromTryCatchNonFatal { unmarshaler(s.types.toVector, e) run (UnmarshalState.empty(bits)) match {
-      case (UnmarshalState(b, _), v) if b.isEmpty => v
-      case _ => throw new Exception("Could not unmarshal all input data")
-    } }
-
-  def unmarshal_(s: Signature, bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): Vector[Field] =
-    unmarshal(s, bits, e) fold (throw _, identity)
-
+  private
   def unmarshalerMany(ss: List[Vector[Type]], e: ByteOrdering): State[UnmarshalState, List[Vector[Field]]] = {
     ss traverseS { s =>
       for {
@@ -187,6 +216,7 @@ trait Marshal {
   def unmarshalMany_(ss: List[Signature], bits: BitVector, e: ByteOrdering = ByteOrdering.BigEndian): List[Vector[Field]] =
     unmarshalMany(ss, bits, e) fold (throw _, identity)
 
+  private
   def decodeField(t: Type, e: ByteOrdering): State[UnmarshalState, Field] = {
     def updateUnmarshalState(f: BitVector => DecodeResult[Field]): State[UnmarshalState, Field] = {
       for {
@@ -239,6 +269,7 @@ trait Marshal {
       }
   }
 
+  private
   def decodeArray(t: Type, e: ByteOrdering): State[UnmarshalState, Field] = {
     def beforeOffset(o: Long): State[UnmarshalState, Boolean] = State { s => (s, s.offset < o)}
     for {
@@ -249,6 +280,7 @@ trait Marshal {
     } yield FieldArray(t, v)
   }
 
+  private
   def decodeDictionary(k: AtomicType, v: Type, e: ByteOrdering): State[UnmarshalState, Field] = {
     val s = List(k, v)
     decodeArray(TypeStructure(s), e)
@@ -257,11 +289,13 @@ trait Marshal {
     }
   }
 
+  private
   def decodeStructure(ts: Seq[Type], e: ByteOrdering): State[UnmarshalState, Field] =
     for {
       v <- unmarshaler(ts.toVector, e)
     } yield FieldStructure(ts.toSignature_, v)
 
+  private
   def decodeVariant(e: ByteOrdering): State[UnmarshalState, Field] = {
     def readType: State[UnmarshalState, Type] =
       for {

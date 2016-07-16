@@ -1,5 +1,7 @@
 package dbus
 
+import scalaz._,Scalaz._
+
 trait Fields {
   import DBus._
 
@@ -107,5 +109,8 @@ trait Fields {
 
   implicit class FieldSeqOps[F <: Field](val fs: Seq[F]) {
     def toFields: Vector[Field] = fs.toVector
+    def toSignature: Throwable \/ Signature = (fs.map(_.t)).toSignature
+    def toSignatureO: Option[Signature] = toSignature.toOption
+    def toSignature_(): Signature = toSignature fold (throw _, identity)
   }
 }
