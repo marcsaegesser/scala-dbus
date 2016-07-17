@@ -94,7 +94,7 @@ object MarshalSpec extends Properties("Marshal") {
   )
 
   def genVariant: Gen[FieldVariant] = lzy(genField map (FieldVariant))
-  def genStructure: Gen[FieldStructure] = lzy(genMessage map (m => FieldStructure(messageSignature_(m), m)))
+  def genStructure: Gen[FieldStructure] = lzy(genMessage map (m => FieldStructure(m.toSignature_, m)))
 
   def genDictionary: Gen[FieldDictionary] = lzy(
     for {
@@ -103,7 +103,7 @@ object MarshalSpec extends Properties("Marshal") {
     } yield FieldDictionary(TypeDictionary(kt, vt), ks.toVector zip vs.toVector)
   )
 
-  def genMessage: Gen[Vector[Field]] = lzy(nonEmptyContainerOf[Vector, Field](genField) suchThat(m => messageSignature(m).isRight))
+  def genMessage: Gen[Vector[Field]] = lzy(nonEmptyContainerOf[Vector, Field](genField) suchThat(m => m.toSignature.isRight))
   implicit lazy val arbMessage = Arbitrary(genMessage)
 
   def genBytes(n: Int): Gen[List[Byte]] = Gen.listOfN(n, arbitrary[Byte])
@@ -118,14 +118,14 @@ object MarshalSpec extends Properties("Marshal") {
   def genInvalidMessage: Gen[(Signature, BitVector)] =
     for {
       m <- genMessage
-      s = messageSignature_(m)
+      s = m.toSignature_
       b = marshal_(m)
       n <- choose(1, 10)
       r <- genBytes(n)
     } yield (s, addRandomBytes(b.toByteVector, r).toBitVector)
 
   property("roundTrip") = forAll { m: Vector[Field] =>
-    val s = messageSignature_(m)
+    val s = m.toSignature_
     unmarshal_(s, marshal_(m)) == m
   }
 
