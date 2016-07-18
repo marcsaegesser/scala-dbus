@@ -24,6 +24,7 @@ trait Marshal {
   def marshal_[F[_]: Foldable](m: F[Field], e: ByteOrdering = ByteOrdering.BigEndian, initial: BitVector = BitVector.empty, offset: Long = 0L): BitVector =
     marshal(m, e, initial, offset) fold (throw _, identity)
 
+
   /** Unmarshal a BitVector to a Vector[Field] given the message signature.
     *
     */
@@ -32,6 +33,7 @@ trait Marshal {
       case (UnmarshalState(b, _), v) if b.isEmpty => v
       case _ => throw new Exception("Could not unmarshal all input data")
     } }
+
 
   /** Unmarshal a BitVector to a Vector[Field] given the message signature, Throws an exception on failure.
     *
