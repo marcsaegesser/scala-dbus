@@ -14,4 +14,6 @@ object Demo extends App {
   c.export("/example/echo", echo)
 
   val _ = StdIn.readLine("Press enter to exit...")
+
+  c.disconnect()
 }
