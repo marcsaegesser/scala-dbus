@@ -16,12 +16,12 @@ scalacOptions in ThisBuild ++= Seq(
   "-language:implicitConversions",
   "-language:experimental.macros")
 
-testOptions in Test += Tests.Setup(classLoader =>
-  classLoader
-    .loadClass("org.slf4j.LoggerFactory")
-    .getMethod("getLogger", classLoader.loadClass("java.lang.String"))
-    .invoke(null, "ROOT")
-)
+// testOptions in Test += Tests.Setup(classLoader =>
+//   classLoader
+//     .loadClass("org.slf4j.LoggerFactory")
+//     .getMethod("getLogger", classLoader.loadClass("java.lang.String"))
+//     .invoke(null, "ROOT")
+// )
 
 resolvers += "tpolecat"  at "http://dl.bintray.com/tpolecat/maven"
 resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"
@@ -73,6 +73,8 @@ import dbus._
 import DBus._
 import scodec.bits._
 """
+
+// fork in Test := true
 
 parallelExecution in Test := false
 
