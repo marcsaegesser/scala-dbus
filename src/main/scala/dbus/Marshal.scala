@@ -58,7 +58,6 @@ trait Marshal {
     (m traverseS_ (marshalField(_, e)))
 
 
-
   import DBusSCodecs._
 
   private

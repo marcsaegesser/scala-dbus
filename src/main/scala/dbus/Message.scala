@@ -59,8 +59,8 @@ trait Message {
     body: Vector[Field]
   ) extends DBusMessage {
     val msgType = MethodCallType
-    val flags = List(if(replyExpected) none else NoReplyExpected.some, if(autoStart) none else NoAutoStart.some) filter (_.isDefined) map (_.get)  //DEMO: Duh, List[Option[_]].filter(_.isDefined).map(_.get) is just flatten
-    val headers = List(HeaderPath(path).some, HeaderMember(member).some, body.toSignatureO map (HeaderSignature(_)), interface map (HeaderInterface(_)), sender map (HeaderSender(_)), destination map (HeaderDestination(_))) filter (_.isDefined) map (_.get)
+    val flags = List(if(replyExpected) none else NoReplyExpected.some, if(autoStart) none else NoAutoStart.some).flatten  //DEMO: Duh, List[Option[_]].filter(_.isDefined).map(_.get) is just flatten
+    val headers = List(HeaderPath(path).some, HeaderMember(member).some, body.toSignatureO map (HeaderSignature(_)), interface map (HeaderInterface(_)), sender map (HeaderSender(_)), destination map (HeaderDestination(_))).flatten
   }
 
   case class MethodReturn(
@@ -71,7 +71,7 @@ trait Message {
   ) extends DBusMessage {
     val msgType = MethodReturnType
     val flags = List(NoReplyExpected)
-    val headers = List(HeaderReplySerial(replySerial).some, body.toSignatureO map (HeaderSignature(_)), sender map (HeaderSender(_)), destination map (HeaderDestination(_))) filter (_.isDefined) map (_.get)
+    val headers = List(HeaderReplySerial(replySerial).some, body.toSignatureO map (HeaderSignature(_)), sender map (HeaderSender(_)), destination map (HeaderDestination(_))).flatten
   }
 
   case class Error(
@@ -84,7 +84,7 @@ trait Message {
   ) extends DBusMessage {
     val msgType = ErrorType
     val flags = List(NoReplyExpected)
-    val headers = List(HeaderError(error).some, HeaderReplySerial(replySerial).some, body.toSignatureO map (HeaderSignature(_)), sender map (HeaderSender(_)), interface map (HeaderInterface(_)), destination map (HeaderDestination(_))) filter (_.isDefined) map (_.get)
+    val headers = List(HeaderError(error).some, HeaderReplySerial(replySerial).some, body.toSignatureO map (HeaderSignature(_)), sender map (HeaderSender(_)), interface map (HeaderInterface(_)), destination map (HeaderDestination(_))).flatten
   }
 
   case class Signal(
@@ -98,6 +98,6 @@ trait Message {
   ) extends DBusMessage {
     val msgType = ErrorType
     val flags = List()
-    val headers = List(HeaderPath(path).some, HeaderMember(member).some, interface map (HeaderInterface(_)), sender map (HeaderSender(_)), destination map (HeaderDestination(_))) filter (_.isDefined) map (_.get)
+    val headers = List(HeaderPath(path).some, HeaderMember(member).some, interface map (HeaderInterface(_)), sender map (HeaderSender(_)), destination map (HeaderDestination(_))).flatten
   }
 }
