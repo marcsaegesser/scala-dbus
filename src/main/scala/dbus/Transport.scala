@@ -5,7 +5,9 @@ import scala.util.control.NonFatal
 import scala.concurrent.stm._
 import com.typesafe.scalalogging._
 import scodec.bits.BitVector
-import scalaz._,Scalaz._
+import cats._
+import cats.data._
+import cats.implicits._
 import cx.ath.matthew.unix._
 
 import DBus._
@@ -21,8 +23,8 @@ trait Transport extends StrictLogging {
 
   def disconnect(): Unit
 
-  def auth(): Throwable \/ Boolean = {
-    \/.fromTryCatchNonFatal {
+  def auth(): Either[Throwable, Boolean] = {
+    Either.catchNonFatal {
       val buffer = new Array[Byte](512)
 
       // This is the bare minimum to get connected and
@@ -45,8 +47,8 @@ trait Transport extends StrictLogging {
         try {
           while(running()) {
             readMessage(in) match {
-              case  \/-((s, m)) => cb(s, m)
-              case -\/ (t) => throw t
+              case Right((s, m)) => cb(s, m)
+              case Left(t)       => throw t
             }
           }
         } catch {
@@ -66,8 +68,8 @@ trait Transport extends StrictLogging {
     running() = false
   }
 
-  def send(bits: BitVector): Throwable \/ Unit =
-    \/.fromTryCatchNonFatal {
+  def send(bits: BitVector): Either[Throwable, Unit] =
+    Either.catchNonFatal {
       out.write(bits.toByteArray)
     }
 
@@ -88,7 +90,7 @@ class UnixSocketTransport(socket: UnixSocket) extends Transport {
 object Transport extends StrictLogging {
   import Connection._
 
-  def connect(addresses: NonEmptyList[BusAddress]): Throwable \/ Transport = {
+  def connect(addresses: NonEmptyList[BusAddress]): Either[Throwable, Transport] = {
     val t =
       addresses.toList collectFirst { a: BusAddress =>
         a match {
@@ -99,8 +101,9 @@ object Transport extends StrictLogging {
     t.get
   }
 
-  private def connectUnix(address: BusAddress): Throwable \/ Transport =
-    \/.fromTryCatchNonFatal {
+  private def connectUnix(address: BusAddress): Either[Throwable, Transport] =
+    Either.catchNonFatal {
+  // \/.fromTryCatchNonFatal {
       val s = new UnixSocket()
       val sockAddr =
         address.parameters.get("abstract").map(new UnixSocketAddress(_, true))
@@ -155,13 +158,13 @@ object MessageReader extends StrictLogging {
     } yield ()
 
   def readBytes(in: InputStream, length: Long): Throwable \/ Array[Byte] = {
-    \/.fromTryCatchNonFatal {
+    Either.catchNonFatal {
       (reader(in) whileM_ (beforeOffset(length)) exec ReaderState.empty(length)).buffer
     }
   }
 
   def readBytes(in: InputStream, initial: Array[Byte], length: Long): Throwable \/ Array[Byte] = {
-    \/.fromTryCatchNonFatal {
+    Either.catchNonFatal {
       (reader(in) whileM_ (beforeOffset(length)) exec ReaderState(initial, length)).buffer
     }
   }

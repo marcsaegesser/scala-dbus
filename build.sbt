@@ -1,6 +1,6 @@
 name := "Scala-DBus"
 
-scalaVersion in ThisBuild := "2.11.7"
+scalaVersion in ThisBuild := "2.11.11"
 
 scalacOptions in ThisBuild ++= Seq(
   "-feature",
@@ -28,11 +28,11 @@ resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repos
 resolvers += "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases"
 
 libraryDependencies in ThisBuild ++= Seq(
-  "org.scalaz"                 %% "scalaz-core"   % "7.1.2",
-  "org.tpolecat"               %% "atto-core"     % "0.4.1",
+  // "org.scalaz"                 %% "scalaz-core"   % "7.2.15",
+  "org.tpolecat"               %% "atto-core"     % "0.6.1-M1",
   "org.scodec"                 %% "scodec-bits"   % "1.0.9",
   "org.scodec"                 %% "scodec-core"   % "1.8.0",
-  "org.scalaz.stream"          %% "scalaz-stream" % "0.7a",
+  // "org.scalaz.stream"          %% "scalaz-stream" % "0.7a",
   "org.scala-stm"              %% "scala-stm"     % "0.7",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
   "org.slf4j"                  %  "slf4j-api"     % "1.7.7",
@@ -66,13 +66,13 @@ unmanagedJars in Compile <++= baseDirectory map { base =>
   (base ** "*.jar").classpath
 }
 
-initialCommands in console := """
-import scalaz._
-import Scalaz._
-import dbus._
-import DBus._
-import scodec.bits._
-"""
+// initialCommands in console := """
+// import scalaz._
+// import Scalaz._
+// import dbus._
+// import DBus._
+// import scodec.bits._
+// """
 
 parallelExecution in Test := false
 

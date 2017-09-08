@@ -3,7 +3,7 @@ package dbus
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
 import scala.collection.mutable.StringBuilder
-import scalaz._,Scalaz._
+import cats._
 import atto._,Atto._
 
 trait Types {

@@ -7,7 +7,9 @@ import scala.concurrent._
 import scala.concurrent.stm._
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
-import scalaz._,Scalaz._
+import cats._
+import cats.data._
+import cats.implicits._
 import DBus._
 
 case class SignalMatchSpec(
@@ -83,29 +85,29 @@ sealed trait Connection extends StrictLogging {
 
   def disconnect(): Unit
 
-  def requestName(name: BusName, flags: Seq[RequestNameFlag]): Throwable \/ RequestNameReply
+  def requestName(name: BusName, flags: Seq[RequestNameFlag]): Either[Throwable, RequestNameReply]
 
-  def releaseName(name: BusName): Throwable \/ ReleaseNameReply
+  def releaseName(name: BusName): Either[Throwable, ReleaseNameReply]
 
-  def subscribe(matcher: SignalMatchSpec, cb: Signal => Unit): Throwable \/ SignalHandler
+  def subscribe(matcher: SignalMatchSpec, cb: Signal => Unit): Either[Throwable, SignalHandler]
 
-  def unsubscribe(handler: SignalHandler): Throwable \/ Unit
+  def unsubscribe(handler: SignalHandler): Either[Throwable, Unit] 
 
-  def call(path: ObjectPath, member: MemberName, dest: BusName, body: Vector[Field]/* = Vector.empty[Field]*/): Throwable \/ Vector[Field]
+  def call(path: ObjectPath, member: MemberName, dest: BusName, body: Vector[Field]/* = Vector.empty[Field]*/): Either[Throwable, Vector[Field]]
 
-  def call(path: ObjectPath, interface: InterfaceName, member: MemberName, dest: BusName, body: Vector[Field] = Vector.empty[Field]): Throwable \/ Vector[Field]
+  def call(path: ObjectPath, interface: InterfaceName, member: MemberName, dest: BusName, body: Vector[Field] = Vector.empty[Field]): Either[Throwable, Vector[Field]]
 
-  def call(path: ObjectPath, member: MemberName, interface: Option[InterfaceName], dest: Option[BusName], autoStart: Boolean, body: Vector[Field]/* = Vector.empty[Field]*/): Throwable \/ Vector[Field]
+  def call(path: ObjectPath, member: MemberName, interface: Option[InterfaceName], dest: Option[BusName], autoStart: Boolean, body: Vector[Field]/* = Vector.empty[Field]*/): Either[Throwable, Vector[Field]]
 
-  def call(method: MethodCall): Throwable \/ Vector[Field]
+  def call(method: MethodCall): Either[Throwable, Vector[Field]]
 
   def callNoReply(method: MethodCall): Unit
 
   def emit(signal: Signal): Unit
 
-  def export(path: ObjectPath, obj: ExportedObject): Throwable \/ Unit
+  def export(path: ObjectPath, obj: ExportedObject): Either[Throwable, Unit]
 
-  protected def authenticate(): Throwable \/ Boolean
+  protected def authenticate(): Either[Throwable, Boolean]
 
   protected def startReadLoop(): Unit
 
@@ -117,11 +119,11 @@ object Connection extends StrictLogging {
   val DBusPath = "/org/freedesktop/DBus".toObjectPath_
   val DBusInterface = "org.freedesktop.DBus".toInterfaceName_
 
-  def parseAddresses(addresses: String): Throwable \/ NonEmptyList[BusAddress] =
+  def parseAddresses(addresses: String): Either[Throwable, NonEmptyList[BusAddress]] =
     busAddrsP.parseOnly(addresses).either.leftMap(es => new Exception(s"Error parsing BusAddress: $es"))
 
 
-  def connect(busType: BusType): Throwable \/ Connection =
+  def connect(busType: BusType): Either[Throwable, Connection] =
     for {
       c <- busType match {
         case SessionBus => connectSession()
@@ -135,7 +137,7 @@ object Connection extends StrictLogging {
   def connect_(busType: BusType): Connection =
     connect(busType) fold (throw _, identity)
 
-  private def connectSession(): Throwable \/ Connection = {
+  private def connectSession(): Either[Throwable, Connection] = {
     val env = System.getenv()
     for {
       as <- parseAddresses(env.get("DBUS_SESSION_BUS_ADDRESS"))
@@ -153,7 +155,8 @@ object Connection extends StrictLogging {
   val valueP = stringOf1(notSepP)
   val kvpP = pairBy(keyP, Atto.char('='), valueP)
   val kvpsP = sepBy1(kvpP, Atto.char(',')).map(_.toList.toMap)
-  val busAddrP = (transportTypeP <~ Atto.char(':') |@| kvpsP)(BusAddress.apply)
+  val busAddrP = (transportTypeP <~ Atto.char(':'), kvpsP).mapN(BusAddress.apply _)
+  // val busAddrP = (transportTypeP <~ Atto.char(':') |@| kvpsP)(BusAddress.apply _)
   val busAddrsP = sepBy1(busAddrP, Atto.char(';'))
 
 }
@@ -175,17 +178,17 @@ class ConnectionImpl(val transport: Transport) extends Connection {
 
   def disconnect(): Unit = transport.disconnect()
 
-  def requestName(name: BusName, flags: Seq[RequestNameFlag]): Throwable \/ RequestNameReply =
+  def requestName(name: BusName, flags: Seq[RequestNameFlag]): Either[Throwable, RequestNameReply] =
     for {
       r <- call(DBusPath, DBusInterface, "RequestName", DBusName, Vector(FieldString(name.name), FieldWord32(encodeBitFieldInt(flags))))
     } yield decodeRequestNameReply(r(0).asInt)
 
-  def releaseName(name: BusName): Throwable \/ ReleaseNameReply =
+  def releaseName(name: BusName): Either[Throwable, ReleaseNameReply] =
     for {
       r <- call(DBusPath, DBusInterface, "ReleaseName", DBusName, Vector(FieldString(name.name)))
     } yield decodeReleaseNameReply(r(0).asInt)
 
-  def subscribe(spec: SignalMatchSpec, cb: Signal => Unit): Throwable \/ SignalHandler = {
+  def subscribe(spec: SignalMatchSpec, cb: Signal => Unit): Either[Throwable, SignalHandler] = {
     for {
       h <- Handler(spec, cb).right
       _ = subscriptions transform { h :: _}
@@ -193,22 +196,22 @@ class ConnectionImpl(val transport: Transport) extends Connection {
     } yield h
   }
 
-  def unsubscribe(handler: SignalHandler): Throwable \/ Unit =
+  def unsubscribe(handler: SignalHandler): Either[Throwable, Unit] =
     for {
       _ <- subscriptions.transform(_.filterNot(_ == handler)).right
       _ <- call(DBusPath, DBusInterface, "RemoveMatch", DBusName, Vector(FieldString(handler.spec.format("signal"))))
     } yield ()
 
-  def call(path: ObjectPath, member: MemberName, dest: BusName, body: Vector[Field]/* = Vector.empty[Field]*/): Throwable \/ Vector[Field] =
+  def call(path: ObjectPath, member: MemberName, dest: BusName, body: Vector[Field]/* = Vector.empty[Field]*/): Either[Throwable, Vector[Field]] =
     call(MethodCall(path, None, member, None, dest.some, true, false, body))
 
-  def call(path: ObjectPath, interface: InterfaceName, member: MemberName, dest: BusName, body: Vector[Field] = Vector.empty[Field]): Throwable \/ Vector[Field] =
+  def call(path: ObjectPath, interface: InterfaceName, member: MemberName, dest: BusName, body: Vector[Field] = Vector.empty[Field]): Either[Throwable, Vector[Field]] =
     call(MethodCall(path, interface.some, member, None, dest.some, true, false, body))
 
-  def call(path: ObjectPath, member: MemberName, interface: Option[InterfaceName], dest: Option[BusName], autoStart: Boolean, body: Vector[Field]/* = Vector.empty[Field]*/): Throwable \/ Vector[Field] =
+  def call(path: ObjectPath, member: MemberName, interface: Option[InterfaceName], dest: Option[BusName], autoStart: Boolean, body: Vector[Field]/* = Vector.empty[Field]*/): Either[Throwable, Vector[Field]] =
     call(MethodCall(path, interface, member, None, dest, true, !autoStart, body))
 
-  def call(method: MethodCall): Throwable \/ Vector[Field] =
+  def call(method: MethodCall): Either[Throwable, Vector[Field]] =
     for {
       s <- serialNumber.getAndIncrement().right
       p <- (Promise[Vector[Field]]).right
@@ -237,7 +240,7 @@ class ConnectionImpl(val transport: Transport) extends Connection {
       } yield ()
   }
 
-  def export(path: ObjectPath, obj: ExportedObject): Throwable \/ Unit = {
+  def export(path: ObjectPath, obj: ExportedObject): Either[Throwable, Unit] = {
     \/.fromTryCatchNonFatal {
       exportedObjects transform { _ + ((path, obj))}
       logger.debug(s"export: data=${obj.interfaces}")
@@ -245,7 +248,7 @@ class ConnectionImpl(val transport: Transport) extends Connection {
     }
   }
 
-  private def awaitOrThrowable[T](f: Future[T], atMost: Duration): Throwable \/ T =
+  private def awaitOrThrowable[T](f: Future[T], atMost: Duration): Either[Throwable, T] =
     \/.fromTryCatchNonFatal {
       Await.result(f, atMost)
     }
@@ -257,7 +260,7 @@ class ConnectionImpl(val transport: Transport) extends Connection {
       case NonFatal(t) => "Unspecified error"
     }
 
-  protected def authenticate(): Throwable \/ Boolean =
+  protected def authenticate(): Either[Throwable, Boolean] =
     transport.auth()
 
   protected def startReadLoop(): Unit =

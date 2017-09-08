@@ -1,7 +1,8 @@
 package dbus
 
 import scala.util.control.NonFatal
-import scalaz._,Scalaz._
+import cats._
+import cats.implicits._
 
 trait Message {
   import DBus._

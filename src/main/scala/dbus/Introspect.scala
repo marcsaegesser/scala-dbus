@@ -1,6 +1,7 @@
 package dbus
 
-import scalaz._,Scalaz._
+import cats._
+import cats.data._
 import DBus._
 
 trait Introspect {

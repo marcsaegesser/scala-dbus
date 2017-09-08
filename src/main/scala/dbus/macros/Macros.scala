@@ -1,6 +1,6 @@
 package dbus.macros
 
-import scalaz._,Scalaz._
+import cats._
 import dbus._,DBus._
 
 object Macros extends MacrosCompat {
